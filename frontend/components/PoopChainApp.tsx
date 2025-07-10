@@ -6,10 +6,6 @@ import { useAccount } from 'wagmi';
 import { ConnectButton } from '@rainbow-me/rainbowkit';
 import { formatEther } from 'viem';
 import { ethers } from 'ethers';
-// For ethers v6 compatibility
-import { JsonRpcProvider } from 'ethers/providers';
-// Import formatEther for ethers v6
-import { formatEther as v6FormatEther } from 'ethers/lib/utils';
 import { 
   useClaimFaucet, 
   useCasinoBet,
@@ -188,17 +184,9 @@ export default function PoopChainApp() {
         try {
           console.log('🌐 Trying RPC:', rpcUrl);
           
-          let provider;
-          let localFormatEther;
-          if (ethers.providers) {
-            // ethers v5
-            provider = new ethers.providers.JsonRpcProvider(rpcUrl);
-            localFormatEther = ethers.utils.formatEther;
-          } else {
-            localFormatEther = v6FormatEther;
-            provider = new JsonRpcProvider(rpcUrl);
-            localFormatEther = ethers.utils.formatEther;
-          }
+          // Use ethers v5 syntax
+          const provider = new ethers.providers.JsonRpcProvider(rpcUrl);
+          const localFormatEther = ethers.utils.formatEther;
           
           // Set a timeout for this provider
           provider.pollingInterval = 1000;
@@ -211,7 +199,7 @@ export default function PoopChainApp() {
           const polFormatted = parseFloat(localFormatEther(polBalanceWei)).toFixed(4);
           
           // Get SHIT balance at latest block
-          const shitContract = new ethers.Contract(SHIT_CONTRACT_ADDRESS, ERC20_ABI, provider as any);
+          const shitContract = new ethers.Contract(SHIT_CONTRACT_ADDRESS, ERC20_ABI, provider);
           const shitBalanceWei = await shitContract.balanceOf(address, { blockTag: 'latest' });
           const shitFormatted = parseFloat(localFormatEther(shitBalanceWei)).toFixed(0);
           
@@ -270,23 +258,16 @@ export default function PoopChainApp() {
     try {
       for (const rpcUrl of POLYGON_RPC_URLS) {
         try {
-          let provider;
-          let localFormatEther;
-          
-          if (ethers.providers) {
-            provider = new ethers.providers.JsonRpcProvider(rpcUrl);
-            localFormatEther = ethers.utils.formatEther;
-          } else {
-            provider = new JsonRpcProvider(rpcUrl);
-            localFormatEther = v6FormatEther;
-          }
+          // Use ethers v5 syntax
+          const provider = new ethers.providers.JsonRpcProvider(rpcUrl);
+          const localFormatEther = ethers.utils.formatEther;
           
           // Get casino stats
-          const casinoContract = new ethers.Contract(process.env.NEXT_PUBLIC_CASINO_ADDRESS, CASINO_STATS_ABI, provider as any);
-          const result = await casinoContract.getCasinoStats();
+          const casinoContract = new ethers.Contract(process.env.NEXT_PUBLIC_CASINO_ADDRESS, CASINO_STATS_ABI, provider);
+          const result: any = await casinoContract.getCasinoStats();
           
           // Get actual SHIT balance of casino contract (THIS IS THE KEY FIX!)
-          const shitContract = new ethers.Contract(SHIT_CONTRACT_ADDRESS, ERC20_ABI, provider as any);
+          const shitContract = new ethers.Contract(SHIT_CONTRACT_ADDRESS, ERC20_ABI, provider);
           const actualShitBalance = await shitContract.balanceOf(process.env.NEXT_PUBLIC_CASINO_ADDRESS);
           const actualShitBalanceFormatted = Number(localFormatEther(actualShitBalance));
           
@@ -332,14 +313,8 @@ export default function PoopChainApp() {
         try {
           console.log('🚰 Checking faucet state with RPC:', rpcUrl);
           
-          let provider;
-          if (ethers.providers) {
-            provider = new ethers.providers.JsonRpcProvider(rpcUrl);
-          } else {
-            provider = new JsonRpcProvider(rpcUrl);
-          }
-          
-          const shitContract = new ethers.Contract(SHIT_CONTRACT_ADDRESS, FAUCET_CHECK_ABI, provider as any);
+          const provider = new ethers.providers.JsonRpcProvider(rpcUrl);
+          const shitContract = new ethers.Contract(SHIT_CONTRACT_ADDRESS, FAUCET_CHECK_ABI, provider);
           
           // Get both values at the same block
           const [canClaim, timeUntil] = await Promise.all([
@@ -452,24 +427,14 @@ export default function PoopChainApp() {
     try {
       for (const rpcUrl of POLYGON_RPC_URLS) {
         try {
-          let provider;
-          let localFormatEther;
-          let localParseEther;
+          // Use ethers v5 syntax
+          const provider = new ethers.providers.JsonRpcProvider(rpcUrl);
+          const localFormatEther = ethers.utils.formatEther;
+          const localParseEther = ethers.utils.parseEther;
           
-          if (ethers.providers) {
-            // ethers v5
-            provider = new ethers.providers.JsonRpcProvider(rpcUrl);
-            localFormatEther = ethers.utils.formatEther;
-            localParseEther = ethers.utils.parseEther;
-          } else {
-            provider = new JsonRpcProvider(rpcUrl);
-            localFormatEther = v6FormatEther;
-            localParseEther = ethers.utils.parseEther;
-          }
+          const dexContract = new ethers.Contract(process.env.NEXT_PUBLIC_DEX_ADDRESS!, DEX_QUOTE_ABI, provider);
           
-          const dexContract = new ethers.Contract(process.env.NEXT_PUBLIC_DEX_ADDRESS, DEX_QUOTE_ABI, provider as any);
-          
-          let result;
+          let result: any;
           if (direction === 'matic-to-shit') {
             result = await dexContract.getMaticToShitQuote(localParseEther(amount));
           } else {
@@ -513,12 +478,7 @@ export default function PoopChainApp() {
     try {
       for (const rpcUrl of POLYGON_RPC_URLS) {
         try {
-          let provider;
-          if (ethers.providers) {
-            provider = new ethers.providers.JsonRpcProvider(rpcUrl);
-          } else {
-            provider = new JsonRpcProvider(rpcUrl);
-          }
+          const provider = new ethers.providers.JsonRpcProvider(rpcUrl);
           
           // Call getReserves directly
           const result = await provider.call({

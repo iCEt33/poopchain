@@ -1,6 +1,6 @@
 // hooks/useContracts.ts (wagmi v1 compatible) - COMPLETELY FIXED
 import React from 'react';
-import { useContractRead, useContractWrite, usePrepareContractWrite, useWaitForTransaction, useContractEvent } from 'wagmi';
+import { useContractRead, useContractWrite, usePrepareContractWrite, useWaitForTransaction } from 'wagmi';
 import { parseEther, formatEther } from 'viem';
 import { ethers } from 'ethers';
 
@@ -506,7 +506,7 @@ export function useCasinoBet(showToast: (message: string, type?: 'success' | 'er
   });
 
   // Listen to GameResult events
-    React.useEffect(() => {
+  React.useEffect(() => {
     if (!userAddress || CONTRACT_ADDRESSES.CASINO === '0x0000000000000000000000000000000000000000') {
         return;
     }
@@ -515,13 +515,8 @@ export function useCasinoBet(showToast: (message: string, type?: 'success' | 'er
 
     const setupEventListener = async () => {
         try {
-        // Use your reliable RPC
-        let provider;
-        if (ethers.providers) {
-            provider = new ethers.providers.JsonRpcProvider('https://polygon.drpc.org');
-        } else {
-            provider = new ethers.providers.JsonRpcProvider('https://polygon.drpc.org');
-        }
+        // Use ethers v5 syntax
+        const provider = new ethers.providers.JsonRpcProvider('https://polygon.drpc.org');
 
         contract = new ethers.Contract(
             CONTRACT_ADDRESSES.CASINO,
@@ -550,23 +545,18 @@ export function useCasinoBet(showToast: (message: string, type?: 'success' | 'er
             }
             processedTxHashes.add(event.transactionHash);
 
-            // Handle ethers version compatibility
-            let localFormatEther;
-            if (ethers.utils) {
-            localFormatEther = ethers.utils.formatEther;
-            } else {
-            localFormatEther = ethers.utils.formatEther;
-            }
+            // Handle ethers v5 syntax
+            const localFormatEther = ethers.utils.formatEther;
 
             const payoutFormatted = Number(localFormatEther(payout));
             
             setGameResult({
-            won: playerWon,
-            result: playerWon ? "You won!" : "You lost!",
-            payout: payoutFormatted,
-            playerChoice: playerChoice,
-            actualResult: result,
-            gasLotteryWon: gasLotteryWon
+                won: playerWon,
+                result: playerWon ? "You won!" : "You lost!",
+                payout: payoutFormatted,
+                playerChoice: playerChoice,
+                actualResult: result,
+                gasLotteryWon: gasLotteryWon
             });
             
             setBetParams(null);
@@ -580,13 +570,13 @@ export function useCasinoBet(showToast: (message: string, type?: 'success' | 'er
         return () => {
             console.log('🧹 Cleaning up ethers event listener');
             if (contract) {
-            contract.removeAllListeners();
+                contract.removeAllListeners();
             }
         };
         
         } catch (error) {
-        console.error('❌ Failed to setup ethers event listener:', error);
-        return null;
+            console.error('❌ Failed to setup ethers event listener:', error);
+            return null;
         }
     };
 
@@ -597,10 +587,10 @@ export function useCasinoBet(showToast: (message: string, type?: 'success' | 'er
 
     return () => {
         if (cleanup) {
-        cleanup.then(cleanupFn => cleanupFn?.());
+            cleanup.then(cleanupFn => cleanupFn?.());
         }
     };
-    }, [userAddress, setGameResult, setBetParams, setTransactionState]);
+  }, [userAddress, setGameResult, setBetParams, setTransactionState]);
 
   const placeBet = (betAmount: string, choice: number) => {
     if (CONTRACT_ADDRESSES.CASINO === '0x0000000000000000000000000000000000000000') {
