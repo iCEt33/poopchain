@@ -1,0 +1,40 @@
+{
+  "name": "poopchain",
+  "version": "1.0.0",
+  "description": "PoopChain - A comedy DeFi ecosystem on Polygon",
+  "main": "index.js",
+  "scripts": {
+    "compile": "npx hardhat compile",
+    "deploy:polygon": "npx hardhat run scripts/deploy.js --network polygon",
+    "deploy:mumbai": "npx hardhat run scripts/deploy.js --network mumbai",
+    "deploy:local": "npx hardhat run scripts/deploy.js --network localhost",
+    "verify": "npx hardhat verify --network polygon",
+    "test": "npx hardhat test",
+    "start": "npx hardhat node",
+    "dev": "npm run start & npm run frontend:dev",
+    "frontend:dev": "cd frontend && npm run dev",
+    "frontend:build": "cd frontend && npm run build",
+    "frontend:deploy": "cd frontend && npm run build && vercel --prod"
+  },
+  "keywords": [
+    "defi",
+    "polygon",
+    "casino",
+    "meme",
+    "dapp",
+    "ethereum",
+    "solidity"
+  ],
+  "author": "PoopChain Team",
+  "license": "MIT",
+  "devDependencies": {
+    "@nomiclabs/hardhat-ethers": "^2.2.3",
+    "@nomiclabs/hardhat-etherscan": "^3.1.7",
+    "@openzeppelin/contracts": "^4.9.0",
+    "hardhat": "^2.17.0",
+    "dotenv": "^16.3.0"
+  },
+  "dependencies": {
+    "ethers": "^5.7.2"
+  }
+}
