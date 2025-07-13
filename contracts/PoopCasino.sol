@@ -24,17 +24,18 @@ contract PoopCasino is Ownable, ReentrancyGuard, Pausable {
     // Game settings
     uint256 public minBet = 10 * 10**18; // 10 SHIT tokens
     uint256 public maxBet = 1000 * 10**18; // 1000 SHIT tokens
-    uint256 public houseBalance; // Casino's SHIT token balance
     
     // Auto-refill settings
-    uint256 public constant REFILL_AMOUNT = 1000 * 10**18; // 1000 SHIT
-    uint256 public constant REFILL_COOLDOWN = 1 hours; // 1 hour between refills
+    uint256 public constant REFILL_AMOUNT = 1000 * 10**18; // 1000 SHIT per refill
+    uint256 public constant AGGRESSIVE_COOLDOWN = 10 minutes; // Fast refills when below 2000
+    uint256 public constant NORMAL_COOLDOWN = 1 hours; // Slow refills when above 2000
     uint256 public constant CRITICAL_BALANCE = 2000 * 10**18; // 2000 SHIT trigger
     uint256 public constant MAX_HOUSE_BALANCE = 10000 * 10**18; // 10k SHIT max
     uint256 public lastRefillTime;
     bool public autoRefillEnabled = true;
+    bool public inRefillMode = false; // Track if we're actively refilling
     
-    // FIXED: Add refill race condition protection
+    // Refill race condition protection
     bool private _refilling;
     
     // Game tracking
@@ -60,56 +61,81 @@ contract PoopCasino is Ownable, ReentrancyGuard, Pausable {
     event HouseFunded(uint256 amount);
     event GasLotteryWin(address indexed player, uint256 gasRefunded);
     event CasinoAutoRefilled(uint256 amount, uint256 newBalance);
-    event HouseBalanceSynced(uint256 newBalance);
     event RefillFailed(string reason);
+    event RefillModeChanged(bool inRefillMode, string reason);
     
     constructor(address _shitCoinAddress) {
         shitCoin = IShitCoin(_shitCoinAddress);
     }
     
     /**
-     * @dev FIXED: Sync house balance with actual token balance
+     * @dev Get actual house balance (always current)
      */
-    function syncHouseBalance() public {
-        uint256 actualBalance = shitCoin.balanceOf(address(this));
-        houseBalance = actualBalance;
-        emit HouseBalanceSynced(actualBalance);
+    function getHouseBalance() public view returns (uint256) {
+        return shitCoin.balanceOf(address(this));
     }
     
     /**
-     * @dev FIXED: Check if casino needs refilling with race condition protection
+     * @dev Check if casino needs refilling with dynamic cooldowns
      */
     function shouldRefill() public view returns (bool) {
-        return !_refilling && // Prevent concurrent refills
-               autoRefillEnabled &&
-               houseBalance < CRITICAL_BALANCE &&
-               block.timestamp >= lastRefillTime + REFILL_COOLDOWN &&
-               houseBalance < MAX_HOUSE_BALANCE;
+        uint256 actualBalance = getHouseBalance();
+        
+        if (!autoRefillEnabled || _refilling) {
+            return false;
+        }
+        
+        // Determine appropriate cooldown based on current balance
+        uint256 cooldown = actualBalance < CRITICAL_BALANCE ? AGGRESSIVE_COOLDOWN : NORMAL_COOLDOWN;
+        
+        // Check if enough time has passed
+        if (block.timestamp < lastRefillTime + cooldown) {
+            return false;
+        }
+        
+        // Always refill if below max balance
+        if (actualBalance < MAX_HOUSE_BALANCE) {
+            return true;
+        }
+        
+        return false;
     }
     
     /**
-     * @dev FIXED: Enhanced auto-refill with proper error handling
+     * @dev Enhanced auto-refill - always targets 10k max balance
      */
     function _performAutoRefill() internal {
+        uint256 currentBalance = getHouseBalance();
         uint256 refillAmount = REFILL_AMOUNT;
         
+        // Enter refill mode if below max balance
+        if (currentBalance < MAX_HOUSE_BALANCE && !inRefillMode) {
+            inRefillMode = true;
+            emit RefillModeChanged(true, currentBalance < CRITICAL_BALANCE ? "Below critical balance" : "Below max balance");
+        }
+        
         // Don't exceed max house balance
-        if (houseBalance + refillAmount > MAX_HOUSE_BALANCE) {
-            refillAmount = MAX_HOUSE_BALANCE - houseBalance;
+        if (currentBalance + refillAmount > MAX_HOUSE_BALANCE) {
+            refillAmount = MAX_HOUSE_BALANCE - currentBalance;
         }
         
         if (refillAmount > 0) {
-            uint256 balanceBefore = shitCoin.balanceOf(address(this));
+            uint256 balanceBefore = getHouseBalance();
             
             try shitCoin.mintForCasino(refillAmount) {
                 // Verify tokens were actually received
-                uint256 balanceAfter = shitCoin.balanceOf(address(this));
+                uint256 balanceAfter = getHouseBalance();
                 uint256 actualReceived = balanceAfter - balanceBefore;
                 
                 if (actualReceived > 0) {
-                    houseBalance = balanceAfter; // Sync with actual balance
                     lastRefillTime = block.timestamp;
-                    emit CasinoAutoRefilled(actualReceived, houseBalance);
+                    emit CasinoAutoRefilled(actualReceived, balanceAfter);
+                    
+                    // Exit refill mode if we've reached max balance
+                    if (balanceAfter >= MAX_HOUSE_BALANCE) {
+                        inRefillMode = false;
+                        emit RefillModeChanged(false, "Max balance reached");
+                    }
                 } else {
                     emit RefillFailed("No tokens received");
                 }
@@ -118,11 +144,17 @@ contract PoopCasino is Ownable, ReentrancyGuard, Pausable {
             } catch {
                 emit RefillFailed("Unknown minting error");
             }
+        } else {
+            // If no refill needed, we must be at max balance
+            if (inRefillMode) {
+                inRefillMode = false;
+                emit RefillModeChanged(false, "Already at max balance");
+            }
         }
     }
     
     /**
-     * @dev FIXED: Protected auto-refill modifier with reentrancy protection
+     * @dev Protected auto-refill modifier with reentrancy protection
      */
     modifier autoRefill() {
         if (shouldRefill() && !_refilling) {
@@ -172,7 +204,6 @@ contract PoopCasino is Ownable, ReentrancyGuard, Pausable {
             shitCoin.transferFrom(msg.sender, address(this), amount),
             "SHIT transfer failed"
         );
-        houseBalance += amount;
         emit HouseFunded(amount);
     }
     
@@ -185,8 +216,9 @@ contract PoopCasino is Ownable, ReentrancyGuard, Pausable {
         require(choice == 0 || choice == 1, "Invalid choice: 0=Butts, 1=Turds");
         require(betAmount >= minBet, "Bet too small");
         
-        // Dynamic max bet based on house balance
-        uint256 dynamicMaxBet = houseBalance / 10; // House can cover 10 max bets
+        // Dynamic max bet based on ACTUAL house balance
+        uint256 currentBalance = getHouseBalance();
+        uint256 dynamicMaxBet = currentBalance / 10; // House can cover 10 max bets
         if (dynamicMaxBet < minBet) {
             dynamicMaxBet = minBet; // Always allow minimum bet
         }
@@ -195,7 +227,7 @@ contract PoopCasino is Ownable, ReentrancyGuard, Pausable {
         }
         
         require(betAmount <= dynamicMaxBet, "Bet too large for current house balance");
-        require(houseBalance >= betAmount, "House cannot cover bet");
+        require(currentBalance >= betAmount, "House cannot cover bet");
         
         // Transfer bet from player
         require(
@@ -207,7 +239,7 @@ contract PoopCasino is Ownable, ReentrancyGuard, Pausable {
         uint256 randomNumber = uint256(
             keccak256(abi.encodePacked(
                 block.timestamp,
-                block.difficulty,
+                block.prevrandao, // FIXED: Use prevrandao instead of difficulty
                 msg.sender,
                 betAmount,
                 choice,
@@ -227,7 +259,6 @@ contract PoopCasino is Ownable, ReentrancyGuard, Pausable {
         if (playerWon) {
             // Player wins - get double their bet
             payout = betAmount * 2;
-            houseBalance -= betAmount; // House loses the bet amount
             
             // Update player stats
             totalWins[msg.sender]++;
@@ -249,7 +280,6 @@ contract PoopCasino is Ownable, ReentrancyGuard, Pausable {
             
         } else {
             // Player loses - house keeps the bet
-            houseBalance += betAmount;
             
             // Update player stats
             totalLosses[msg.sender]++;
@@ -280,8 +310,7 @@ contract PoopCasino is Ownable, ReentrancyGuard, Pausable {
                 }
             }
             
-            // Burn the lost tokens (deflationary)
-            // Send to dead address (effectively burning)
+            // Burn the lost tokens
             require(shitCoin.transfer(address(0x000000000000000000000000000000000000dEaD), betAmount), "Burn transfer failed");
         }
         
@@ -312,7 +341,7 @@ contract PoopCasino is Ownable, ReentrancyGuard, Pausable {
         uint256 randomNumber = uint256(
             keccak256(abi.encodePacked(
                 block.timestamp,
-                block.difficulty,
+                block.prevrandao, // FIXED: Use prevrandao instead of difficulty
                 user,
                 gasAmount,
                 "lottery"
@@ -333,10 +362,11 @@ contract PoopCasino is Ownable, ReentrancyGuard, Pausable {
     }
     
     /**
-     * @dev Get current dynamic max bet based on house balance
+     * @dev Get current dynamic max bet based on ACTUAL house balance
      */
     function getCurrentMaxBet() external view returns (uint256) {
-        uint256 dynamicMaxBet = houseBalance / 10; // House can cover 10 max bets
+        uint256 currentBalance = getHouseBalance();
+        uint256 dynamicMaxBet = currentBalance / 10; // House can cover 10 max bets
         if (dynamicMaxBet < minBet) {
             return minBet; // Always allow minimum bet
         }
@@ -366,7 +396,7 @@ contract PoopCasino is Ownable, ReentrancyGuard, Pausable {
     }
     
     /**
-     * @dev Get casino stats including auto-refill info
+     * @dev FIXED: Get casino stats using ACTUAL balance + refill mode
      */
     function getCasinoStats() external view returns (
         uint256 houseBalanceAmount,
@@ -374,10 +404,11 @@ contract PoopCasino is Ownable, ReentrancyGuard, Pausable {
         uint256 maxBetAmount,
         uint256 currentMaxBet,
         uint256 winChance,
-        bool needsRefill,
-        uint256 timeUntilRefill
+        bool refillNeeded,
+        uint256 nextRefillTime
     ) {
-        uint256 dynamicMaxBet = houseBalance / 10;
+        uint256 currentBalance = getHouseBalance();
+        uint256 dynamicMaxBet = currentBalance / 10;
         if (dynamicMaxBet < minBet) {
             dynamicMaxBet = minBet;
         }
@@ -385,21 +416,23 @@ contract PoopCasino is Ownable, ReentrancyGuard, Pausable {
             dynamicMaxBet = maxBet;
         }
         
-        bool needsRefill = shouldRefill();
-        uint256 timeUntilRefill = 0;
-        if (!needsRefill && lastRefillTime > 0) {
-            uint256 nextRefill = lastRefillTime + REFILL_COOLDOWN;
-            timeUntilRefill = block.timestamp >= nextRefill ? 0 : nextRefill - block.timestamp;
+        bool _refillNeeded = shouldRefill();
+        uint256 _nextRefillTime = 0;
+        if (!_refillNeeded && lastRefillTime > 0) {
+            // Use appropriate cooldown based on current balance
+            uint256 cooldown = currentBalance < CRITICAL_BALANCE ? AGGRESSIVE_COOLDOWN : NORMAL_COOLDOWN;
+            uint256 nextRefill = lastRefillTime + cooldown;
+            _nextRefillTime = block.timestamp >= nextRefill ? 0 : nextRefill - block.timestamp;
         }
         
         return (
-            houseBalance,
+            currentBalance, // Return actual balance
             minBet,
             maxBet,
             dynamicMaxBet,
             WIN_CHANCE,
-            needsRefill,
-            timeUntilRefill
+            _refillNeeded,
+            _nextRefillTime
         );
     }
     
@@ -413,11 +446,11 @@ contract PoopCasino is Ownable, ReentrancyGuard, Pausable {
     }
     
     /**
-     * @dev Owner can withdraw house profits
+     * @dev Owner can withdraw house profits (based on actual balance)
      */
     function withdrawHouseProfits(uint256 amount) external onlyOwner {
-        require(amount <= houseBalance, "Insufficient house balance");
-        houseBalance -= amount;
+        uint256 currentBalance = getHouseBalance();
+        require(amount <= currentBalance, "Insufficient house balance");
         require(shitCoin.transfer(owner(), amount), "Withdrawal failed");
     }
     
@@ -425,7 +458,7 @@ contract PoopCasino is Ownable, ReentrancyGuard, Pausable {
      * @dev Emergency withdrawal (owner only)
      */
     function emergencyWithdraw() external onlyOwner {
-        uint256 balance = shitCoin.balanceOf(address(this));
+        uint256 balance = getHouseBalance();
         if (balance > 0) {
             require(shitCoin.transfer(owner(), balance), "Emergency withdrawal failed");
         }
@@ -435,7 +468,5 @@ contract PoopCasino is Ownable, ReentrancyGuard, Pausable {
             (bool success, ) = owner().call{value: maticBalance}("");
             require(success, "MATIC withdrawal failed");
         }
-        
-        houseBalance = 0;
     }
 }

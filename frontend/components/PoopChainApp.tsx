@@ -5,16 +5,12 @@ import { Coins, Gamepad2, RefreshCw, Volume2, Wallet, Fuel } from 'lucide-react'
 import { useAccount } from 'wagmi';
 import { ConnectButton } from '@rainbow-me/rainbowkit';
 import { formatEther } from 'viem';
-import { ethers } from 'ethers';
 import { 
   useClaimFaucet, 
   useCasinoBet,
   useDexSwap,
-  useCasinoStats,
   useMintingStats,
   useManualRefill,
-  useGasPoolHealth,
-  useGasPoolBreakdown,
   useShitAllowance,
   useApproveShit,
   useShitDexAllowance,
@@ -23,15 +19,18 @@ import {
   useSyncReserves,
 } from '../hooks/useContracts';
 
+// Import optimized data hooks
+import {
+  useOptimizedBalances,
+  useOptimizedCasinoStats,
+  useOptimizedFaucetState,
+  useOptimizedDexReserves,
+  useOptimizedDexQuote,
+  useTransactionEvents
+} from '../hooks/useDataManager';
+
 // Import the new component
 import GasPoolDashboard from './GasPoolDashboard';
-
-// Constants for ethers - FIXED: Use free reliable RPC
-const POLYGON_RPC_URLS = [
-  'https://polygon.drpc.org'
-];
-const SHIT_CONTRACT_ADDRESS = process.env.NEXT_PUBLIC_SHITCOIN_ADDRESS || '';
-const ERC20_ABI = ['function balanceOf(address account) view returns (uint256)'];
 
 // FIXED: Global fart system - make it actually work
 class FartSoundSystem {
@@ -167,195 +166,12 @@ const Toast = ({ toast, onClose }: { toast: any, onClose: () => void }) => (
 export default function PoopChainApp() {
   const { address, isConnected } = useAccount();
   
-  // Direct ethers balance state (no wagmi caching bullshit)
-  const [polBalance, setPolBalance] = useState('0.0000');
-  const [shitBalance, setShitBalance] = useState('0');
-  const [isLoadingBalances, setIsLoadingBalances] = useState(false);
+  // ✅ NEW: Optimized data fetching with smart caching
+  const { data: balances, loading: balancesLoading, refresh: refreshBalances } = useOptimizedBalances(address);
+  const { data: casinoStats, loading: casinoLoading } = useOptimizedCasinoStats();
+  const { data: faucetState, loading: faucetStateLoading } = useOptimizedFaucetState(address);
+  const { data: dexReserves, loading: dexReservesLoading, refresh: refreshDexReserves } = useOptimizedDexReserves();
   
-  // Fetch balances directly with ethers
-  const fetchBalances = useCallback(async () => {
-    if (!address || !SHIT_CONTRACT_ADDRESS) return;
-    
-    setIsLoadingBalances(true);
-    
-    try {
-      // Try multiple RPC endpoints to get consistent data
-      for (const rpcUrl of POLYGON_RPC_URLS) {
-        try {
-          console.log('🌐 Trying RPC:', rpcUrl);
-          
-          // Use ethers v5 syntax
-          const provider = new ethers.providers.JsonRpcProvider(rpcUrl);
-          const localFormatEther = ethers.utils.formatEther;
-          
-          // Set a timeout for this provider
-          provider.pollingInterval = 1000;
-          
-          // Get current block to ensure we're getting latest data
-          const currentBlock = await provider.getBlockNumber();
-          
-          // Get POL balance at latest block
-          const polBalanceWei = await provider.getBalance(address, 'latest');
-          const polFormatted = parseFloat(localFormatEther(polBalanceWei)).toFixed(4);
-          
-          // Get SHIT balance at latest block
-          const shitContract = new ethers.Contract(SHIT_CONTRACT_ADDRESS, ERC20_ABI, provider);
-          const shitBalanceWei = await shitContract.balanceOf(address, { blockTag: 'latest' });
-          const shitFormatted = parseFloat(localFormatEther(shitBalanceWei)).toFixed(0);
-          
-          // Success! Update balances and break
-          setPolBalance(polFormatted);
-          setShitBalance(shitFormatted);
-          
-          console.log('✅ SUCCESS with', rpcUrl, 'at block', currentBlock, ':', { 
-            pol: polFormatted, 
-            shit: shitFormatted,
-            timestamp: new Date().toISOString()
-          });
-          
-          break; // Exit loop on first success
-          
-        } catch (rpcError) {
-          console.log('❌ RPC failed:', rpcUrl, (rpcError instanceof Error ? rpcError.message : String(rpcError)));
-          continue; // Try next RPC
-        }
-      }
-      
-    } catch (error) {
-      console.error('❌ All RPCs failed:', error);
-    } finally {
-      setIsLoadingBalances(false);
-    }
-  }, [address]);
-  
-  // Auto refresh every 10 seconds
-  useEffect(() => {
-    if (!address) return;
-    
-    fetchBalances(); // Initial fetch
-    const interval = setInterval(fetchBalances, 13000);
-    return () => clearInterval(interval);
-  }, [address, fetchBalances]);
-
-  // Add casino stats state
-  const [casinoStats, setCasinoStats] = useState<{
-    houseBalance: number;
-    minBet: number;
-    maxBet: number;
-    currentMaxBet: number;
-    needsRefill: boolean;
-  } | null>(null);
-
-  // Casino contract ABI for stats
-  const CASINO_STATS_ABI = [
-    'function getCasinoStats() view returns (uint256 houseBalanceAmount, uint256 minBetAmount, uint256 maxBetAmount, uint256 currentMaxBet, uint256 winChance, bool needsRefill, uint256 timeUntilRefill)'
-  ];
-
-  // Fetch casino stats with ethers
-  const fetchCasinoStats = useCallback(async () => {
-    if (!process.env.NEXT_PUBLIC_CASINO_ADDRESS) return;
-    
-    try {
-      for (const rpcUrl of POLYGON_RPC_URLS) {
-        try {
-          // Use ethers v5 syntax
-          const provider = new ethers.providers.JsonRpcProvider(rpcUrl);
-          const localFormatEther = ethers.utils.formatEther;
-          
-          // Get casino stats
-          const casinoContract = new ethers.Contract(process.env.NEXT_PUBLIC_CASINO_ADDRESS, CASINO_STATS_ABI, provider);
-          const result: any = await casinoContract.getCasinoStats();
-          
-          // Get actual SHIT balance of casino contract (THIS IS THE KEY FIX!)
-          const shitContract = new ethers.Contract(SHIT_CONTRACT_ADDRESS, ERC20_ABI, provider);
-          const actualShitBalance = await shitContract.balanceOf(process.env.NEXT_PUBLIC_CASINO_ADDRESS);
-          const actualShitBalanceFormatted = Number(localFormatEther(actualShitBalance));
-          
-          setCasinoStats({
-            houseBalance: actualShitBalanceFormatted, // Use actual balance!
-            minBet: Number(localFormatEther(result[1])),
-            maxBet: Number(localFormatEther(result[2])),
-            currentMaxBet: actualShitBalanceFormatted / 10, // Base max bet on actual balance
-            needsRefill: actualShitBalanceFormatted < 2000 // Base refill trigger on actual balance
-          });
-          
-          console.log('✅ Casino stats fetched:', { 
-            trackedBalance: Number(localFormatEther(result[0])),
-            actualBalance: actualShitBalanceFormatted,
-            maxBet: actualShitBalanceFormatted / 10
-          });
-          break;
-          
-        } catch (rpcError) {
-          console.log('❌ Casino stats RPC failed:', rpcUrl);
-          continue;
-        }
-      }
-    } catch (error) {
-      console.error('❌ All casino stats RPCs failed:', error);
-    }
-  }, []);
-
-  // Auto-refresh casino stats every 10 seconds
-  useEffect(() => {
-    fetchCasinoStats(); // Initial fetch
-    const interval = setInterval(fetchCasinoStats, 18000);
-    return () => clearInterval(interval);
-  }, [fetchCasinoStats]);
-
-  const fetchFaucetState = useCallback(async () => {
-    if (!address || !SHIT_CONTRACT_ADDRESS) return;
-    
-    setIsLoadingFaucetState(true);
-    
-    try {
-      for (const rpcUrl of POLYGON_RPC_URLS) {
-        try {
-          console.log('🚰 Checking faucet state with RPC:', rpcUrl);
-          
-          const provider = new ethers.providers.JsonRpcProvider(rpcUrl);
-          const shitContract = new ethers.Contract(SHIT_CONTRACT_ADDRESS, FAUCET_CHECK_ABI, provider);
-          
-          // Get both values at the same block
-          const [canClaim, timeUntil] = await Promise.all([
-            shitContract.canClaimFaucet(address, { blockTag: 'latest' }),
-            shitContract.timeUntilNextClaim(address, { blockTag: 'latest' })
-          ]);
-          
-          const timeUntilNumber = Number(timeUntil);
-          
-          setCanClaimFaucet(canClaim);
-          setTimeUntilClaim(timeUntilNumber);
-          
-          console.log('✅ Faucet state fetched:', { 
-            canClaim, 
-            timeUntil: timeUntilNumber,
-            address,
-            timestamp: new Date().toISOString()
-          });
-          
-          break; // Exit loop on first success
-          
-        } catch (rpcError) {
-          console.log('❌ Faucet RPC failed:', rpcUrl, rpcError);
-          continue;
-        }
-      }
-    } catch (error) {
-      console.error('❌ All faucet RPCs failed:', error);
-    } finally {
-      setIsLoadingFaucetState(false);
-    }
-  }, [address]);
-
-  useEffect(() => {
-    if (!address) return;
-    
-    fetchFaucetState(); // Initial fetch
-    const interval = setInterval(fetchFaucetState, 10000); // Every 5 seconds
-    return () => clearInterval(interval);
-  }, [address, fetchFaucetState]);
-
   // Component state
   const [isMounted, setIsMounted] = useState(false);
   const { toasts, showToast, dismissToast } = useToast();
@@ -364,6 +180,12 @@ export default function PoopChainApp() {
   const [betChoice, setBetChoice] = useState(0);
   const [swapAmount, setSwapAmount] = useState('');
   const [swapDirection, setSwapDirection] = useState<'matic-to-shit' | 'shit-to-matic'>('matic-to-shit');
+  
+  // DEX quote with optimized fetching
+  const { data: dexQuote, loading: isLoadingQuote } = useOptimizedDexQuote(swapAmount, swapDirection);
+  
+  // Transaction event handler
+  const invalidateTransactionData = useTransactionEvents();
   
   // Casino state
   const [casinoState, setCasinoState] = useState<{
@@ -376,12 +198,20 @@ export default function PoopChainApp() {
     lastTxHash: null,
   });
 
-  // Contract hooks - FIXED: Remove showResultToast
-  const [canClaimFaucet, setCanClaimFaucet] = useState(false);
-  const [timeUntilClaim, setTimeUntilClaim] = useState(0);
-  const [isLoadingFaucetState, setIsLoadingFaucetState] = useState(false);
-  const { claimFaucet, isLoading: faucetLoading } = useClaimFaucet(showToast, fetchFaucetState);
-  const { placeBet: contractPlaceBet, isLoading: casinoLoading, gameResult, clearGameResult } = useCasinoBet(showToast, address);
+  // Create stable callbacks for transaction success
+  const handleFaucetSuccess = useCallback(() => {
+    // Invalidate data after successful faucet claim
+    invalidateTransactionData('faucet', address);
+  }, [invalidateTransactionData, address]);
+
+  const handleSwapSuccess = useCallback(() => {
+    // Invalidate data after successful swap
+    invalidateTransactionData('dex', address);
+  }, [invalidateTransactionData, address]);
+
+  // Contract hooks
+  const { claimFaucet, isLoading: faucetLoading } = useClaimFaucet(showToast, handleFaucetSuccess);
+  const { placeBet: contractPlaceBet, isLoading: contractCasinoLoading, gameResult, clearGameResult } = useCasinoBet(showToast, address);
   const { swapMaticForShit, swapShitForMatic, isLoading: swapLoading } = useDexSwap(showToast);
 
   // Approval hooks
@@ -390,136 +220,25 @@ export default function PoopChainApp() {
   const { data: shitDexAllowance } = useShitDexAllowance(address);
   const { approveDex, isLoading: dexApprovalLoading } = useApproveDex(showToast);
   
-  // Casino/DEX hooks
+  // Other hooks
   const { data: mintingStats } = useMintingStats();
   const { triggerRefill, isLoading: refillLoading } = useManualRefill(showToast);
-  const [dexQuote, setDexQuote] = useState<{shitOut: string, feeAmount: string} | null>(null);
-  const [isLoadingQuote, setIsLoadingQuote] = useState(false);
   const { data: dexOwner } = useDexOwner();
   const { syncReserves, isLoading: syncLoading } = useSyncReserves(showToast);
 
-  // Add this with your other state
-  const [dexReserves, setDexReserves] = useState<{matic: number, shit: number} | null>(null);
-
   // Check if current user is the owner
   const isOwner = address && dexOwner && address.toLowerCase() === dexOwner.toLowerCase();
-  
-  const FAUCET_CHECK_ABI = [
-    'function canClaimFaucet(address user) view returns (bool)',
-    'function timeUntilNextClaim(address user) view returns (uint256)'
-  ];
 
-  // DEX contract ABI for quotes
-  const DEX_QUOTE_ABI = [
-    'function getMaticToShitQuote(uint256 maticAmount) view returns (uint256 shitOut, uint256 feeAmount)',
-    'function getShitToMaticQuote(uint256 shitAmount) view returns (uint256 maticOut, uint256 feeAmount)'
-  ];
-
-  // Fetch DEX quote with ethers
-  const fetchDexQuote = useCallback(async (amount: string, direction: 'matic-to-shit' | 'shit-to-matic') => {
-    if (!amount || parseFloat(amount) <= 0 || !process.env.NEXT_PUBLIC_DEX_ADDRESS) {
-      setDexQuote(null);
-      return;
-    }
-    
-    setIsLoadingQuote(true);
-    
-    try {
-      for (const rpcUrl of POLYGON_RPC_URLS) {
-        try {
-          // Use ethers v5 syntax
-          const provider = new ethers.providers.JsonRpcProvider(rpcUrl);
-          const localFormatEther = ethers.utils.formatEther;
-          const localParseEther = ethers.utils.parseEther;
-          
-          const dexContract = new ethers.Contract(process.env.NEXT_PUBLIC_DEX_ADDRESS!, DEX_QUOTE_ABI, provider);
-          
-          let result: any;
-          if (direction === 'matic-to-shit') {
-            result = await dexContract.getMaticToShitQuote(localParseEther(amount));
-          } else {
-            result = await dexContract.getShitToMaticQuote(localParseEther(amount));
-          }
-          
-          setDexQuote({
-            shitOut: localFormatEther(result[0]),
-            feeAmount: localFormatEther(result[1])
-          });
-          
-          console.log('✅ DEX quote fetched:', { amount, direction, quote: result });
-          break;
-          
-        } catch (rpcError) {
-          console.log('❌ Quote RPC failed:', rpcUrl, rpcError);
-          continue;
-        }
-      }
-    } catch (error) {
-      console.error('❌ All quote RPCs failed:', error);
-      setDexQuote(null);
-    } finally {
-      setIsLoadingQuote(false);
-    }
-  }, []);
-
-  // Auto-fetch quote when swap amount or direction changes
-  useEffect(() => {
-    if (swapAmount && parseFloat(swapAmount) > 0) {
-      fetchDexQuote(swapAmount, swapDirection);
-    } else {
-      setDexQuote(null);
-    }
-  }, [swapAmount, swapDirection, fetchDexQuote]);
-
-  // Add this function near your other ethers functions
-  const fetchDexReserves = useCallback(async () => {
-    if (!process.env.NEXT_PUBLIC_DEX_ADDRESS) return;
-    
-    try {
-      for (const rpcUrl of POLYGON_RPC_URLS) {
-        try {
-          const provider = new ethers.providers.JsonRpcProvider(rpcUrl);
-          
-          // Call getReserves directly
-          const result = await provider.call({
-            to: process.env.NEXT_PUBLIC_DEX_ADDRESS,
-            data: '0x0902f1ac' // getReserves() function selector
-          });
-          
-          // Decode the result
-          const polReserve = parseInt(result.slice(2, 66), 16) / 1e18;
-          const shitReserve = parseInt(result.slice(66, 130), 16) / 1e18;
-          
-          setDexReserves({
-            matic: polReserve,
-            shit: shitReserve
-          });
-          
-          console.log('✅ DEX reserves fetched:', { polReserve, shitReserve });
-          break;
-          
-        } catch (rpcError) {
-          console.log('❌ Reserves RPC failed:', rpcUrl);
-          continue;
-        }
-      }
-    } catch (error) {
-      console.error('❌ All reserves RPCs failed:', error);
-    }
-  }, []);
-
-  // Auto-refresh reserves every 10 seconds
-  useEffect(() => {
-    fetchDexReserves(); // Initial fetch
-    const interval = setInterval(fetchDexReserves, 42000);
-    return () => clearInterval(interval);
-  }, [fetchDexReserves]);
-
-  // Extract values
-  const currentMaxBet = casinoStats ? casinoStats.currentMaxBet : 1000;
-  const houseBalance = casinoStats ? casinoStats.houseBalance : 0;
-  const minBet = casinoStats ? casinoStats.minBet : 10;
-  const needsRefill = casinoStats ? casinoStats.needsRefill : false;
+  // Extract values with fallbacks
+  const polBalance = balances?.pol || '0.0000';
+  const shitBalance = balances?.shit || '0';
+  const currentMaxBet = casinoStats?.currentMaxBet || 1000;
+  const houseBalance = casinoStats?.houseBalance || 0;
+  const minBet = casinoStats?.minBet || 10;
+  const needsRefill = casinoStats?.needsRefill || false;
+  const timeUntilRefill = casinoStats?.timeUntilRefill || 0;
+  const canClaimFaucet = faucetState?.canClaim || false;
+  const timeUntilClaim = faucetState?.timeUntilClaim || 0;
   
   const totalMinted = mintingStats ? Number(formatEther(mintingStats[0])) : 0;
   const dailyMintingUsed = mintingStats ? Number(formatEther(mintingStats[1])) : 0;
@@ -527,8 +246,8 @@ export default function PoopChainApp() {
 
   // Approval logic
   const hasEnoughAllowance = useMemo(() => {
-    if (!betAmount || parseFloat(betAmount) <= 0) return true;  // ✅ Empty input = don't show approve
-    if (!shitAllowance) return false;  // ✅ No allowance data = need approve
+    if (!betAmount || parseFloat(betAmount) <= 0) return true;
+    if (!shitAllowance) return false;
     const allowanceAmount = Number(formatEther(shitAllowance));
     const betAmountNum = parseFloat(betAmount);
     return allowanceAmount >= betAmountNum && allowanceAmount > 0;
@@ -536,8 +255,8 @@ export default function PoopChainApp() {
 
   const hasEnoughDexAllowance = useMemo(() => {
     if (swapDirection === 'matic-to-shit') return true;
-    if (!swapAmount || parseFloat(swapAmount) <= 0) return true;  // ✅ Empty input = don't show approve
-    if (!shitDexAllowance) return false;  // ✅ No allowance data = need approve
+    if (!swapAmount || parseFloat(swapAmount) <= 0) return true;
+    if (!shitDexAllowance) return false;
     return Number(formatEther(shitDexAllowance)) >= parseFloat(swapAmount);
   }, [shitDexAllowance, swapAmount, swapDirection]);
 
@@ -545,18 +264,16 @@ export default function PoopChainApp() {
   const handleClaimFaucet = useCallback(() => {
     if (!faucetLoading) {
       claimFaucet();
-      setTimeout(fetchBalances, 3000);
     }
-  }, [claimFaucet, faucetLoading, fetchBalances]);
+  }, [claimFaucet, faucetLoading]);
 
-  // FIXED: Updated handlePlaceBet function
   const handlePlaceBet = useCallback(() => {
     if (!hasEnoughAllowance) {
       showToast('❌ Please approve SHIT tokens first!', 'error');
       return;
     }
     
-    if (casinoLoading || casinoState.isFlipping || casinoState.gameActive) {
+    if (contractCasinoLoading || casinoState.isFlipping || casinoState.gameActive) {
       return;
     }
     
@@ -566,12 +283,10 @@ export default function PoopChainApp() {
       return;
     }
     
-    // Clear any existing game result
     clearGameResult();
-    
     setCasinoState(prev => ({ ...prev, gameActive: true }));
     contractPlaceBet(betAmount, betChoice);
-  }, [contractPlaceBet, betAmount, betChoice, casinoLoading, casinoState.isFlipping, casinoState.gameActive, hasEnoughAllowance, minBet, currentMaxBet, showToast, clearGameResult]);
+  }, [contractPlaceBet, betAmount, betChoice, contractCasinoLoading, casinoState.isFlipping, casinoState.gameActive, hasEnoughAllowance, minBet, currentMaxBet, showToast, clearGameResult]);
 
   const handleSwap = useCallback(() => {
     if (!swapLoading && swapAmount && parseFloat(swapAmount) > 0) {
@@ -580,31 +295,27 @@ export default function PoopChainApp() {
       } else {
         swapShitForMatic(swapAmount, '0');
       }
-      setTimeout(fetchBalances, 3000);
+      // Invalidate data after successful swap - will be handled by the swap hook's success callback
+      setTimeout(handleSwapSuccess, 2000);
     }
-  }, [swapLoading, swapAmount, swapDirection, swapMaticForShit, swapShitForMatic, fetchBalances]);
+  }, [swapLoading, swapAmount, swapDirection, swapMaticForShit, swapShitForMatic, handleSwapSuccess]);
 
-  // REPLACE the useEffect with this:
+  // Casino game result handler
   useEffect(() => {
-    if (gameResult && !casinoLoading && casinoState.gameActive && !casinoState.isFlipping) {
+    if (gameResult && !contractCasinoLoading && casinoState.gameActive && !casinoState.isFlipping) {
       console.log('🎲 Starting casino animation with result:', gameResult);
       
-      // Store result locally
       const result = { ...gameResult };
       
-      // IMMEDIATELY set gameActive to false and clear gameResult
       setCasinoState(prev => ({ 
         ...prev, 
         isFlipping: true,
-        gameActive: false  // ← This enables the button immediately
+        gameActive: false
       }));
       
-      // Clear game result immediately
       clearGameResult();
       
-      // After GIF plays (3 seconds), show toast and reset
       setTimeout(() => {
-        // Show the result toast using stored result
         if (result.won) {
           console.log('🔊 Playing win fart');
           fartSystem.playFart('win_fart');
@@ -621,40 +332,36 @@ export default function PoopChainApp() {
           showToast(message, result.gasLotteryWon ? 'success' : 'error');
         }
         
-        // Final cleanup
         setCasinoState({
           isFlipping: false,
           gameActive: false,
           lastTxHash: null,
         });
         
-        // Refresh balances
-        setTimeout(fetchBalances, 1000);
+        // Invalidate casino and balance data
+        invalidateTransactionData('casino', address);
       }, 3000);
     }
-  }, [gameResult, casinoLoading, casinoState.gameActive, casinoState.isFlipping, clearGameResult, showToast, fetchBalances]);
+  }, [gameResult, contractCasinoLoading, casinoState.gameActive, casinoState.isFlipping, clearGameResult, showToast, invalidateTransactionData, address]);
 
-  useEffect(() => {
-    console.log('🎯 Casino state debug:', {
-      gameResult: !!gameResult,
-      gameResultDetails: gameResult,
-      casinoLoading,
-      gameActive: casinoState.gameActive,
-      isFlipping: casinoState.isFlipping,
-      buttonShouldBeDisabled: casinoLoading || casinoState.isFlipping || casinoState.gameActive || gameResult !== null
-    });
-  }, [gameResult, casinoLoading, casinoState.gameActive, casinoState.isFlipping]);
-
-  // Timer state
+  // Timer state for faucet countdown
   const [displayTime, setDisplayTime] = useState(timeUntilClaim);
+
+  // Timer state for refill countdown
+  const [displayRefillTime, setDisplayRefillTime] = useState(timeUntilRefill);
 
   useEffect(() => {
     setDisplayTime(timeUntilClaim);
   }, [timeUntilClaim]);
 
   useEffect(() => {
+    setDisplayRefillTime(timeUntilRefill);
+  }, [timeUntilRefill]);
+
+  useEffect(() => {
     const interval = setInterval(() => {
-      setDisplayTime(prev => prev > 0 ? prev - 1 : 0);
+      setDisplayTime((prev: number) => prev > 0 ? prev - 1 : 0);
+      setDisplayRefillTime((prev: number) => prev > 0 ? prev - 1 : 0);
     }, 1000);
     
     return () => clearInterval(interval);
@@ -787,17 +494,17 @@ export default function PoopChainApp() {
           </div>
           
           <div className="flex items-center gap-4">
-            {/* Fresh ethers balances - no wagmi bullshit */}
+            {/* Optimized balance display */}
             <div className="text-right text-lg">
               <div className="text-amber-200 flex items-center gap-2">
                 POL: <span className="font-mono">{polBalance}</span>
                 <button 
-                  onClick={fetchBalances}
+                  onClick={refreshBalances}
                   className="text-amber-400 hover:text-amber-100 text-sm ml-1 transition-colors"
                   title="Refresh balances"
-                  disabled={isLoadingBalances}
+                  disabled={balancesLoading}
                 >
-                  {isLoadingBalances ? '⏳' : '🔄'}
+                  {balancesLoading ? '⏳' : '🔄'}
                 </button>
               </div>
               <div className="text-amber-200 flex items-center gap-2">
@@ -877,7 +584,7 @@ export default function PoopChainApp() {
             </div>
           )}
           
-          {/* FIXED: Casino Tab */}
+          {/* Casino Tab */}
           {selectedTab === 'casino' && (
             <div className="text-center">
               <div className="text-6xl mb-6">🎲</div>
@@ -896,7 +603,7 @@ export default function PoopChainApp() {
                     onChange={(e) => setBetAmount(e.target.value)}
                     min={minBet}
                     max={currentMaxBet}
-                    disabled={casinoLoading || casinoState.isFlipping || casinoState.gameActive}
+                    disabled={contractCasinoLoading || casinoState.isFlipping || casinoState.gameActive}
                     className="w-full px-6 py-4 rounded-xl bg-amber-900/50 border border-amber-600/50 text-amber-100 text-center text-xl focus:outline-none focus:border-amber-400 disabled:opacity-50"
                     placeholder={`${minBet} - ${currentMaxBet}`}
                   />
@@ -926,12 +633,12 @@ export default function PoopChainApp() {
                       <div className="grid grid-cols-2 gap-6 h-full">
                         <button
                           onClick={() => setBetChoice(0)}
-                          disabled={casinoLoading || casinoState.isFlipping || casinoState.gameActive}
+                          disabled={contractCasinoLoading || casinoState.isFlipping || casinoState.gameActive}
                           className={`p-8 rounded-xl border-4 transition-all transform hover:scale-105 ${
                             betChoice === 0
                               ? 'border-pink-400 bg-pink-400/20 text-pink-200 shadow-lg'
                               : 'border-amber-600/50 bg-amber-900/30 text-amber-300 hover:border-pink-400/50'
-                          } ${(casinoLoading || casinoState.isFlipping || casinoState.gameActive) ? 'opacity-50 cursor-not-allowed' : ''}`}
+                          } ${(contractCasinoLoading || casinoState.isFlipping || casinoState.gameActive) ? 'opacity-50 cursor-not-allowed' : ''}`}
                         >
                           <div className="text-6xl mb-2">🍑</div>
                           <div className="font-bold text-xl">BUTTS</div>
@@ -939,12 +646,12 @@ export default function PoopChainApp() {
                         
                         <button
                           onClick={() => setBetChoice(1)}
-                          disabled={casinoLoading || casinoState.isFlipping || casinoState.gameActive}
+                          disabled={contractCasinoLoading || casinoState.isFlipping || casinoState.gameActive}
                           className={`p-8 rounded-xl border-4 transition-all transform hover:scale-105 ${
                             betChoice === 1
                               ? 'border-amber-600 bg-amber-600/20 text-amber-200 shadow-lg'
                               : 'border-amber-600/50 bg-amber-900/30 text-amber-300 hover:border-amber-600/70'
-                          } ${(casinoLoading || casinoState.isFlipping || casinoState.gameActive) ? 'opacity-50 cursor-not-allowed' : ''}`}
+                          } ${(contractCasinoLoading || casinoState.isFlipping || casinoState.gameActive) ? 'opacity-50 cursor-not-allowed' : ''}`}
                         >
                           <div className="text-6xl mb-2">💩</div>
                           <div className="font-bold text-xl">TURDS</div>
@@ -966,7 +673,7 @@ export default function PoopChainApp() {
                   <button
                     onClick={handlePlaceBet}
                     disabled={
-                      casinoLoading || 
+                      contractCasinoLoading || 
                       casinoState.isFlipping || 
                       casinoState.gameActive ||
                       !betAmount || 
@@ -975,7 +682,7 @@ export default function PoopChainApp() {
                     }
                     className="w-full bg-purple-600 hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed text-white px-12 py-6 rounded-xl font-bold text-xl transition-all transform hover:scale-105"
                   >
-                    {casinoLoading ? 'Processing...' : 
+                    {contractCasinoLoading ? 'Processing...' : 
                     casinoState.isFlipping ? 'Flipping...' : 
                     `Bet ${betAmount} SHIT on ${betChoice === 0 ? 'BUTTS' : 'TURDS'} 💨`}
                   </button>
@@ -1072,7 +779,8 @@ export default function PoopChainApp() {
                     {swapLoading ? 'Swapping...' : `Swap ${swapDirection === 'matic-to-shit' ? 'POL → SHIT' : 'SHIT → POL'} 💨`}
                   </button>
                 )}
-                {/* Only show if user is owner */}
+                
+                {/* Owner controls */}
                 {isOwner && (
                   <div className="mb-6">
                     <button
@@ -1084,17 +792,19 @@ export default function PoopChainApp() {
                     </button>
                   </div>
                 )}
-                {/* ADD THIS LIQUIDITY DISPLAY RIGHT HERE: */}
+                
+                {/* Optimized liquidity display */}
                 {dexReserves && (
                   <div className="bg-amber-900/30 rounded-lg p-4 mb-6 border border-amber-600/30">
                     <div className="flex justify-between items-center mb-3">
                       <h4 className="text-amber-100 font-bold">💧 Liquidity Pool</h4>
                       <button 
-                        onClick={fetchDexReserves}
+                        onClick={refreshDexReserves}
                         className="text-amber-400 hover:text-amber-100 text-sm"
                         title="Refresh reserves"
+                        disabled={dexReservesLoading}
                       >
-                        🔄
+                        {dexReservesLoading ? '⏳' : '🔄'}
                       </button>
                     </div>
                     <div className="grid grid-cols-2 gap-4 text-center">
@@ -1109,6 +819,7 @@ export default function PoopChainApp() {
                     </div>
                   </div>
                 )}
+                
                 <p className="text-base text-amber-300">
                   {swapDirection === 'shit-to-matic' && !hasEnoughDexAllowance
                     ? 'One-time approval needed to swap SHIT tokens'
@@ -1183,6 +894,12 @@ export default function PoopChainApp() {
                 <div className={`text-sm ${needsRefill ? 'text-green-300' : 'text-amber-300'}`}>
                   {needsRefill ? 'Ready!' : 'Monitoring'}
                 </div>
+                {/* Show countdown timer when monitoring */}
+                {!needsRefill && displayRefillTime > 0 && (
+                  <div className="text-xs text-amber-400 mt-1 font-mono">
+                    {formatTimeRemaining(displayRefillTime)}
+                  </div>
+                )}
               </div>
               
               <div className="bg-amber-800/20 backdrop-blur-lg rounded-xl p-4 border border-amber-600/30 text-center">
@@ -1199,5 +916,5 @@ export default function PoopChainApp() {
   );
 }
 
-// Export fartSystem for use in hooks
+// Export fart system for use in hooks
 export { fartSystem };
