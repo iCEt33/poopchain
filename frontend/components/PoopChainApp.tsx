@@ -495,14 +495,14 @@ export default function PoopChainApp() {
     );
   }
 
-  // Not connected state (PRESERVED FROM ORIGINAL but made mobile-friendly)
+  // Not connected state (FIXED: Restore original desktop sizing)
   if (!isConnected) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-amber-900 via-yellow-800 to-orange-900 flex items-center justify-center p-4">
-        <div className="bg-amber-800/20 backdrop-blur-lg rounded-3xl p-8 md:p-12 text-center border border-amber-600/30 w-full max-w-lg">
+        <div className="bg-amber-800/20 backdrop-blur-lg rounded-3xl p-8 md:p-12 text-center border border-amber-600/30 w-full max-w-md md:max-w-none md:w-auto">
           <div className="text-6xl md:text-9xl mb-6 md:mb-12">💩</div>
           <h1 className="text-4xl md:text-8xl font-bold text-amber-100 mb-4 md:mb-8">PoopChain</h1>
-          <p className="text-lg md:text-2xl text-amber-200 mb-8 md:mb-16">From Polygon to Poopygon - we made it shittier!</p>
+          <p className="text-lg md:text-2xl text-amber-200 mb-8 md:mb-16 md:whitespace-nowrap">From Polygon to Poopygon - we made it shittier!</p>
           <div className="flex justify-center">
             <div className="orange-connect-button">
               <ConnectButton />
