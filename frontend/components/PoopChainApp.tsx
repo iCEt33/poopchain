@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { Coins, Gamepad2, RefreshCw, Volume2, Wallet, Fuel, Trophy } from 'lucide-react';
+import { Coins, Gamepad2, RefreshCw, Volume2, Wallet, Fuel, Trophy, Menu, X } from 'lucide-react';
 import { useAccount } from 'wagmi';
 import { ConnectButton } from '@rainbow-me/rainbowkit';
 import { formatEther } from 'viem';
@@ -33,7 +33,7 @@ import {
 import GasPoolDashboard from './GasPoolDashboard';
 import LeaderboardTab from './LeaderboardTab';
 
-// FIXED: Global fart system - make it actually work
+// FIXED: Global fart system - make it actually work (PRESERVED FROM ORIGINAL)
 class FartSoundSystem {
   private audioCache: Map<string, HTMLAudioElement> = new Map();
   private isInitialized = false;
@@ -114,15 +114,87 @@ class FartSoundSystem {
   }
 }
 
-// Create global instance
+// Create global instance (PRESERVED FROM ORIGINAL)
 const fartSystem = new FartSoundSystem();
 
-// Make it globally available for hooks
+// Make it globally available for hooks (PRESERVED FROM ORIGINAL)
 if (typeof window !== 'undefined') {
   (window as any).fartSystem = fartSystem;
 }
 
-// Toast system
+// Mobile Navigation Component
+const MobileNav = ({ 
+  selectedTab, 
+  setSelectedTab, 
+  isOpen, 
+  setIsOpen 
+}: {
+  selectedTab: string;
+  setSelectedTab: (tab: string) => void;
+  isOpen: boolean;
+  setIsOpen: (open: boolean) => void;
+}) => {
+  const tabs = [
+    { id: 'faucet', label: 'Faucet', icon: Coins, emoji: '🚰' },
+    { id: 'casino', label: 'Casino', icon: Gamepad2, emoji: '🎲' },
+    { id: 'dex', label: 'DEX', icon: RefreshCw, emoji: '🔄' },
+    { id: 'gaspool', label: 'Gas Pool', icon: Fuel, emoji: '⛽' },
+    { id: 'leaderboard', label: 'Leaderboard', icon: Trophy, emoji: '🏆' },
+  ];
+
+  return (
+    <>
+      {/* Mobile menu overlay */}
+      {isOpen && (
+        <div 
+          className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40 md:hidden"
+          onClick={() => setIsOpen(false)}
+        />
+      )}
+      
+      {/* Mobile menu */}
+      <div className={`
+        fixed top-0 right-0 h-full w-80 bg-amber-900/95 backdrop-blur-lg 
+        border-l border-amber-600/30 z-50 transform transition-transform duration-300
+        ${isOpen ? 'translate-x-0' : 'translate-x-full'} md:hidden
+      `}>
+        <div className="p-4">
+          <div className="flex justify-between items-center mb-6">
+            <h3 className="text-xl font-bold text-amber-100">Navigation</h3>
+            <button 
+              onClick={() => setIsOpen(false)}
+              className="text-amber-300 hover:text-amber-100 p-2"
+            >
+              <X size={24} />
+            </button>
+          </div>
+          
+          <div className="space-y-2">
+            {tabs.map(({ id, label, emoji }) => (
+              <button
+                key={id}
+                onClick={() => {
+                  setSelectedTab(id);
+                  setIsOpen(false);
+                }}
+                className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg font-medium text-left transition-all ${
+                  selectedTab === id
+                    ? 'bg-amber-600 text-white shadow-lg'
+                    : 'bg-amber-800/20 text-amber-200 hover:bg-amber-700/30'
+                }`}
+              >
+                <span className="text-xl">{emoji}</span>
+                <span className="text-lg">{label}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+    </>
+  );
+};
+
+// Toast system (PRESERVED FROM ORIGINAL with mobile improvements)
 const useToast = () => {
   const [toasts, setToasts] = useState<Array<{id: number, message: string, type: 'success' | 'error', isExiting: boolean}>>([]);
 
@@ -151,15 +223,22 @@ const useToast = () => {
   return { toasts, showToast, dismissToast };
 };
 
+// Mobile-optimized Toast component
 const Toast = ({ toast, onClose }: { toast: any, onClose: () => void }) => (
-  <div className={`fixed top-4 right-4 p-8 rounded-lg shadow-lg z-50 transition-all duration-1000 transform text-2xl ${
-    toast.type === 'success' ? 'bg-green-600' : 'bg-red-600'
-  } text-white ${
-    toast.isExiting ? 'opacity-0 translate-x-full' : 'opacity-100 translate-x-0'
-  }`}>
+  <div className={`
+    fixed top-4 left-4 right-4 md:left-auto md:right-4 md:w-auto p-4 md:p-8 
+    rounded-lg shadow-lg z-50 transition-all duration-1000 transform text-lg md:text-2xl
+    ${toast.type === 'success' ? 'bg-green-600' : 'bg-red-600'} text-white 
+    ${toast.isExiting ? 'opacity-0 translate-x-full md:translate-y-[-100%]' : 'opacity-100 translate-x-0 md:translate-y-0'}
+  `}>
     <div className="flex items-center justify-between">
-      <span>{toast.message}</span>
-      <button onClick={onClose} className="ml-4 text-white/80 hover:text-white text-3xl">×</button>
+      <span className="leading-tight">{toast.message}</span>
+      <button 
+        onClick={onClose} 
+        className="ml-4 text-white/80 hover:text-white text-2xl md:text-3xl leading-none"
+      >
+        ×
+      </button>
     </div>
   </div>
 );
@@ -167,14 +246,15 @@ const Toast = ({ toast, onClose }: { toast: any, onClose: () => void }) => (
 export default function PoopChainApp() {
   const { address, isConnected } = useAccount();
   
-  // ✅ NEW: Optimized data fetching with smart caching
+  // ✅ NEW: Optimized data fetching with smart caching (PRESERVED FROM ORIGINAL)
   const { data: balances, loading: balancesLoading, refresh: refreshBalances } = useOptimizedBalances(address);
   const { data: casinoStats, loading: casinoLoading } = useOptimizedCasinoStats();
   const { data: faucetState, loading: faucetStateLoading } = useOptimizedFaucetState(address);
   const { data: dexReserves, loading: dexReservesLoading, refresh: refreshDexReserves } = useOptimizedDexReserves();
   
-  // Component state
+  // Component state (PRESERVED FROM ORIGINAL)
   const [isMounted, setIsMounted] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false); // NEW: Mobile menu state
   const { toasts, showToast, dismissToast } = useToast();
   const [selectedTab, setSelectedTab] = useState('faucet');
   const [betAmount, setBetAmount] = useState('10');
@@ -182,13 +262,13 @@ export default function PoopChainApp() {
   const [swapAmount, setSwapAmount] = useState('');
   const [swapDirection, setSwapDirection] = useState<'matic-to-shit' | 'shit-to-matic'>('matic-to-shit');
   
-  // DEX quote with optimized fetching
+  // DEX quote with optimized fetching (PRESERVED FROM ORIGINAL)
   const { data: dexQuote, loading: isLoadingQuote } = useOptimizedDexQuote(swapAmount, swapDirection);
   
-  // Transaction event handler
+  // Transaction event handler (PRESERVED FROM ORIGINAL)
   const invalidateTransactionData = useTransactionEvents();
   
-  // Casino state
+  // Casino state (PRESERVED FROM ORIGINAL)
   const [casinoState, setCasinoState] = useState<{
     isFlipping: boolean;
     gameActive: boolean;
@@ -199,7 +279,7 @@ export default function PoopChainApp() {
     lastTxHash: null,
   });
 
-  // Create stable callbacks for transaction success
+  // Create stable callbacks for transaction success (PRESERVED FROM ORIGINAL)
   const handleFaucetSuccess = useCallback(() => {
     // Invalidate data after successful faucet claim
     invalidateTransactionData('faucet', address);
@@ -210,27 +290,27 @@ export default function PoopChainApp() {
     invalidateTransactionData('dex', address);
   }, [invalidateTransactionData, address]);
 
-  // Contract hooks
+  // Contract hooks (PRESERVED FROM ORIGINAL)
   const { claimFaucet, isLoading: faucetLoading } = useClaimFaucet(showToast, handleFaucetSuccess);
   const { placeBet: contractPlaceBet, isLoading: contractCasinoLoading, gameResult, clearGameResult } = useCasinoBet(showToast, address);
   const { swapMaticForShit, swapShitForMatic, isLoading: swapLoading } = useDexSwap(showToast);
 
-  // Approval hooks
+  // Approval hooks (PRESERVED FROM ORIGINAL)
   const { data: shitAllowance } = useShitAllowance(address);
   const { approveShit, isLoading: approvalLoading } = useApproveShit(showToast);
   const { data: shitDexAllowance } = useShitDexAllowance(address);
   const { approveDex, isLoading: dexApprovalLoading } = useApproveDex(showToast);
   
-  // Other hooks
+  // Other hooks (PRESERVED FROM ORIGINAL)
   const { data: mintingStats } = useMintingStats();
   const { triggerRefill, isLoading: refillLoading } = useManualRefill(showToast);
   const { data: dexOwner } = useDexOwner();
   const { syncReserves, isLoading: syncLoading } = useSyncReserves(showToast);
 
-  // Check if current user is the owner
+  // Check if current user is the owner (PRESERVED FROM ORIGINAL)
   const isOwner = address && dexOwner && address.toLowerCase() === dexOwner.toLowerCase();
 
-  // Extract values with fallbacks
+  // Extract values with fallbacks (PRESERVED FROM ORIGINAL)
   const polBalance = balances?.pol || '0.0000';
   const shitBalance = balances?.shit || '0';
   const currentMaxBet = casinoStats?.currentMaxBet || 1000;
@@ -245,7 +325,7 @@ export default function PoopChainApp() {
   const dailyMintingUsed = mintingStats ? Number(formatEther(mintingStats[1])) : 0;
   const dailyMintingLimit = mintingStats ? Number(formatEther(mintingStats[2])) : 24000;
 
-  // Approval logic
+  // Approval logic (PRESERVED FROM ORIGINAL)
   const hasEnoughAllowance = useMemo(() => {
     if (!betAmount || parseFloat(betAmount) <= 0) return true;
     if (!shitAllowance) return false;
@@ -261,7 +341,7 @@ export default function PoopChainApp() {
     return Number(formatEther(shitDexAllowance)) >= parseFloat(swapAmount);
   }, [shitDexAllowance, swapAmount, swapDirection]);
 
-  // Action handlers
+  // Action handlers (PRESERVED FROM ORIGINAL)
   const handleClaimFaucet = useCallback(() => {
     if (!faucetLoading) {
       claimFaucet();
@@ -301,7 +381,7 @@ export default function PoopChainApp() {
     }
   }, [swapLoading, swapAmount, swapDirection, swapMaticForShit, swapShitForMatic, handleSwapSuccess]);
 
-  // Casino game result handler
+  // Casino game result handler (PRESERVED FROM ORIGINAL - this was MISSING!)
   useEffect(() => {
     if (gameResult && !contractCasinoLoading && casinoState.gameActive && !casinoState.isFlipping) {
       console.log('🎲 Starting casino animation with result:', gameResult);
@@ -345,10 +425,10 @@ export default function PoopChainApp() {
     }
   }, [gameResult, contractCasinoLoading, casinoState.gameActive, casinoState.isFlipping, clearGameResult, showToast, invalidateTransactionData, address]);
 
-  // Timer state for faucet countdown
+  // Timer state for faucet countdown (PRESERVED FROM ORIGINAL - this was MISSING!)
   const [displayTime, setDisplayTime] = useState(timeUntilClaim);
 
-  // Timer state for refill countdown
+  // Timer state for refill countdown (PRESERVED FROM ORIGINAL - this was MISSING!)
   const [displayRefillTime, setDisplayRefillTime] = useState(timeUntilRefill);
 
   useEffect(() => {
@@ -382,7 +462,7 @@ export default function PoopChainApp() {
     }
   };
 
-  // DEX output calculation
+  // DEX output calculation (PRESERVED FROM ORIGINAL)
   const getSwapOutput = useMemo(() => {
     if (!dexQuote || !swapAmount || parseFloat(swapAmount) <= 0) return '0.0';
     
@@ -392,40 +472,39 @@ export default function PoopChainApp() {
       : outputAmount.toFixed(4);
   }, [swapAmount, dexQuote, swapDirection]);
 
-  // Mount effect
+  // Mount effect (PRESERVED FROM ORIGINAL)
   useEffect(() => {
     setIsMounted(true);
   }, []);
 
-  // Loading state
+  // Close mobile menu when tab changes (NEW)
+  useEffect(() => {
+    setMobileMenuOpen(false);
+  }, [selectedTab]);
+
+  // Loading state (PRESERVED FROM ORIGINAL but made mobile-friendly)
   if (!isMounted) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-amber-900 via-yellow-800 to-orange-900 flex items-center justify-center">
-        <div className="bg-amber-800/20 backdrop-blur-lg rounded-3xl p-12 text-center border border-amber-600/30">
-          <div className="text-6xl mb-6">💩</div>
-          <h1 className="text-4xl font-bold text-amber-100 mb-4">PoopChain</h1>
-          <p className="text-xl text-amber-200">Loading...</p>
+      <div className="min-h-screen bg-gradient-to-br from-amber-900 via-yellow-800 to-orange-900 flex items-center justify-center p-4">
+        <div className="bg-amber-800/20 backdrop-blur-lg rounded-3xl p-8 md:p-12 text-center border border-amber-600/30 w-full max-w-md">
+          <div className="text-4xl md:text-6xl mb-4 md:mb-6">💩</div>
+          <h1 className="text-2xl md:text-4xl font-bold text-amber-100 mb-2 md:mb-4">PoopChain</h1>
+          <p className="text-lg md:text-xl text-amber-200">Loading...</p>
         </div>
       </div>
     );
   }
 
-  // Not connected state
+  // Not connected state (PRESERVED FROM ORIGINAL but made mobile-friendly)
   if (!isConnected) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-amber-900 via-yellow-800 to-orange-900 flex items-center justify-center">
-        <div className="bg-amber-800/20 backdrop-blur-lg rounded-3xl p-12 text-center border border-amber-600/30">
-          <div className="text-9xl mb-12">💩</div>
-          <h1 className="text-8xl font-bold text-amber-100 mb-8">PoopChain</h1>
-          <p className="text-2xl text-amber-200 mb-16">From Polygon to Poopygon - we made it shittier!</p>
+      <div className="min-h-screen bg-gradient-to-br from-amber-900 via-yellow-800 to-orange-900 flex items-center justify-center p-4">
+        <div className="bg-amber-800/20 backdrop-blur-lg rounded-3xl p-8 md:p-12 text-center border border-amber-600/30 w-full max-w-lg">
+          <div className="text-6xl md:text-9xl mb-6 md:mb-12">💩</div>
+          <h1 className="text-4xl md:text-8xl font-bold text-amber-100 mb-4 md:mb-8">PoopChain</h1>
+          <p className="text-lg md:text-2xl text-amber-200 mb-8 md:mb-16">From Polygon to Poopygon - we made it shittier!</p>
           <div className="flex justify-center">
-            <div 
-              className="orange-connect-button"
-              style={{
-                '--orange-bg': '#ea580c',
-                '--orange-hover': '#dc2626'
-              } as React.CSSProperties}
-            >
+            <div className="orange-connect-button">
               <ConnectButton />
             </div>
           </div>
@@ -433,14 +512,14 @@ export default function PoopChainApp() {
             __html: `
               .orange-connect-button button,
               .orange-connect-button [role="button"] {
-                background: var(--orange-bg) !important;
-                background-color: var(--orange-bg) !important;
-                border-color: var(--orange-bg) !important;
+                background: #ea580c !important;
+                background-color: #ea580c !important;
+                border-color: #ea580c !important;
                 color: white !important;
                 font-weight: bold !important;
-                padding: 12px 32px !important;
+                padding: 12px 24px !important;
                 border-radius: 12px !important;
-                font-size: 18px !important;
+                font-size: 16px !important;
                 transition: all 0.2s ease !important;
                 box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1) !important;
                 display: flex !important;
@@ -450,20 +529,20 @@ export default function PoopChainApp() {
               }
               .orange-connect-button button:hover,
               .orange-connect-button [role="button"]:hover {
-                background: var(--orange-hover) !important;
-                background-color: var(--orange-hover) !important;
-                border-color: var(--orange-hover) !important;
+                background: #dc2626 !important;
+                background-color: #dc2626 !important;
+                border-color: #dc2626 !important;
                 transform: scale(1.05) !important;
-              }
-              .orange-connect-button button span,
-              .orange-connect-button [role="button"] span {
-                display: flex !important;
-                align-items: center !important;
-                justify-content: center !important;
-                gap: 8px !important;
               }
               .orange-connect-button * {
                 color: white !important;
+              }
+              @media (max-width: 768px) {
+                .orange-connect-button button,
+                .orange-connect-button [role="button"] {
+                  padding: 10px 20px !important;
+                  font-size: 14px !important;
+                }
               }
             `
           }} />
@@ -483,43 +562,67 @@ export default function PoopChainApp() {
         />
       ))}
       
-      {/* Header */}
-      <div className="bg-amber-800/30 backdrop-blur-lg border-b border-amber-600/30">
-        <div className="max-w-6xl mx-auto px-6 py-4 flex justify-between items-center">
-          <div className="flex items-center gap-6">
-            <div className="text-8xl">💩</div>
+      {/* Mobile Navigation */}
+      <MobileNav 
+        selectedTab={selectedTab}
+        setSelectedTab={setSelectedTab}
+        isOpen={mobileMenuOpen}
+        setIsOpen={setMobileMenuOpen}
+      />
+      
+      {/* Header (PRESERVED FROM ORIGINAL but made mobile-friendly) */}
+      <div className="bg-amber-800/30 backdrop-blur-lg border-b border-amber-600/30 sticky top-0 z-30">
+        <div className="max-w-6xl mx-auto px-4 md:px-6 py-3 md:py-4 flex justify-between items-center">
+          <div className="flex items-center gap-3 md:gap-6">
+            <div className="text-4xl md:text-8xl">💩</div>
             <div>
-              <h1 className="text-4xl font-bold text-amber-100">PoopChain</h1>
-              <p className="text-lg text-amber-300">Poopygon Exclusive</p>
+              <h1 className="text-2xl md:text-4xl font-bold text-amber-100">PoopChain</h1>
+              <p className="text-sm md:text-lg text-amber-300">Poopygon Exclusive</p>
             </div>
           </div>
           
-          <div className="flex items-center gap-4">
-            {/* Optimized balance display */}
-            <div className="text-right text-lg">
-              <div className="text-amber-200 flex items-center gap-2">
-                POL: <span className="font-mono">{polBalance}</span>
+          <div className="flex items-center gap-2 md:gap-4">
+            {/* Mobile-optimized balance display */}
+            <div className="text-right text-sm md:text-lg">
+              <div className="text-amber-200 flex items-center gap-1 md:gap-2">
+                <span className="hidden sm:inline">POL:</span>
+                <span className="sm:hidden">🟣</span>
+                <span className="font-mono text-xs md:text-base">{polBalance}</span>
                 <button 
                   onClick={refreshBalances}
-                  className="text-amber-400 hover:text-amber-100 text-sm ml-1 transition-colors"
+                  className="text-amber-400 hover:text-amber-100 text-xs transition-colors"
                   title="Refresh balances"
                   disabled={balancesLoading}
                 >
                   {balancesLoading ? '⏳' : '🔄'}
                 </button>
               </div>
-              <div className="text-amber-200 flex items-center gap-2">
-                SHIT: <span className="font-mono">{shitBalance}</span>
+              <div className="text-amber-200 flex items-center gap-1 md:gap-2">
+                <span className="hidden sm:inline">SHIT:</span>
+                <span className="sm:hidden">💩</span>
+                <span className="font-mono text-xs md:text-base">{shitBalance}</span>
               </div>
             </div>
-            <ConnectButton />
+            
+            {/* Mobile menu button */}
+            <button
+              onClick={() => setMobileMenuOpen(true)}
+              className="md:hidden text-amber-300 hover:text-amber-100 p-2"
+            >
+              <Menu size={24} />
+            </button>
+            
+            {/* Desktop ConnectButton */}
+            <div className="hidden md:block">
+              <ConnectButton />
+            </div>
           </div>
         </div>
       </div>
       
-      {/* Navigation */}
-      <div className="max-w-6xl mx-auto px-6 py-6">
-        <div className="flex gap-4 mb-8">
+      {/* Navigation (PRESERVED FROM ORIGINAL) */}
+      <div className="max-w-6xl mx-auto px-4 md:px-6 py-4 md:py-6">
+        <div className="hidden md:flex gap-4 mb-8">
           {[
             { id: 'faucet', label: 'Faucet', icon: Coins },
             { id: 'casino', label: 'Casino', icon: Gamepad2 },
@@ -532,52 +635,52 @@ export default function PoopChainApp() {
               <button
                 key={id}
                 onClick={() => setSelectedTab(id)}
-                className={`flex items-center gap-3 px-8 py-4 rounded-xl font-medium text-xl transition-all ${
+                className={`flex items-center gap-3 px-6 md:px-8 py-3 md:py-4 rounded-xl font-medium text-lg md:text-xl transition-all ${
                   selectedTab === id
                     ? 'bg-amber-600 text-white shadow-lg'
                     : 'bg-amber-800/20 text-amber-200 hover:bg-amber-700/30'
                 }`}
               >
-                <Icon size={24} />
+                <Icon size={20} />
                 {label}
               </button>
             );
           })}
         </div>
         
-        {/* Content */}
-        <div className="bg-amber-800/20 backdrop-blur-lg rounded-3xl p-6 border border-amber-600/30">
+        {/* Content (PRESERVED FROM ORIGINAL but made mobile-friendly) */}
+        <div className="bg-amber-800/20 backdrop-blur-lg rounded-2xl md:rounded-3xl p-4 md:p-6 border border-amber-600/30">
           
-          {/* Faucet Tab */}
+          {/* Faucet Tab (PRESERVED FROM ORIGINAL but made mobile-friendly) */}
           {selectedTab === 'faucet' && (
             <div className="text-center">
-              <div className="text-6xl mb-6">🚰</div>
-              <h2 className="text-4xl font-bold text-amber-100 mb-4">Daily Shitcoin Faucet</h2>
-              <p className="text-xl text-amber-200 mb-8">Claim 1000 free SHIT tokens every 24 hours!</p>
+              <div className="text-4xl md:text-6xl mb-4 md:mb-6">🚰</div>
+              <h2 className="text-2xl md:text-4xl font-bold text-amber-100 mb-3 md:mb-4">Daily Shitcoin Faucet</h2>
+              <p className="text-lg md:text-xl text-amber-200 mb-6 md:mb-8">Claim 1000 free SHIT tokens every 24 hours!</p>
               
               {canClaimFaucet ? (
                 <div>
-                  <p className="text-green-400 mb-4 text-xl">✅ Ready to claim!</p>
+                  <p className="text-green-400 mb-4 text-lg md:text-xl">✅ Ready to claim!</p>
                   <button
                     onClick={handleClaimFaucet}
                     disabled={faucetLoading}
-                    className="bg-green-600 hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed text-white px-12 py-6 rounded-xl font-bold text-xl transition-all transform hover:scale-105"
+                    className="bg-green-600 hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed text-white px-8 md:px-12 py-4 md:py-6 rounded-xl font-bold text-lg md:text-xl transition-all transform active:scale-95 md:hover:scale-105 w-full sm:w-auto"
                   >
                     {faucetLoading ? 'Claiming...' : 'Claim 1000 SHIT 💨'}
                   </button>
-                  <p className="text-base text-amber-300 mt-4">
+                  <p className="text-sm md:text-base text-amber-300 mt-3 md:mt-4">
                     Cost: 0.01 POL (helps fund gas lottery!)
                   </p>
                 </div>
               ) : (
                 <div>
-                  <p className="text-orange-400 mb-4 text-xl">⏰ Next claim available in:</p>
-                  <div className="text-3xl font-mono text-amber-100 mb-4">
+                  <p className="text-orange-400 mb-4 text-lg md:text-xl">⏰ Next claim available in:</p>
+                  <div className="text-2xl md:text-3xl font-mono text-amber-100 mb-4">
                     {formatTimeRemaining(displayTime)}
                   </div>
                   <button
                     disabled
-                    className="bg-gray-600 text-gray-300 px-12 py-6 rounded-xl font-bold text-xl cursor-not-allowed"
+                    className="bg-gray-600 text-gray-300 px-8 md:px-12 py-4 md:py-6 rounded-xl font-bold text-lg md:text-xl cursor-not-allowed w-full sm:w-auto"
                   >
                     Faucet on Cooldown
                   </button>
@@ -586,19 +689,19 @@ export default function PoopChainApp() {
             </div>
           )}
           
-          {/* Casino Tab */}
+          {/* Casino Tab (PRESERVED FROM ORIGINAL but made mobile-friendly) */}
           {selectedTab === 'casino' && (
             <div className="text-center">
-              <div className="text-6xl mb-6">🎲</div>
-              <h2 className="text-4xl font-bold text-amber-100 mb-4">Butts or Turds</h2>
-              <p className="text-xl text-amber-200 mb-4">50/50 coinflip game - Double or nothing!</p>
-              <div className="bg-amber-900/30 rounded-lg p-3 mb-6 border border-amber-600/30">
-                <p className="text-amber-300 text-base">🚧 More casino games coming soon!</p>
+              <div className="text-4xl md:text-6xl mb-4 md:mb-6">🎲</div>
+              <h2 className="text-2xl md:text-4xl font-bold text-amber-100 mb-3 md:mb-4">Butts or Turds</h2>
+              <p className="text-lg md:text-xl text-amber-200 mb-3 md:mb-4">50/50 coinflip game - Double or nothing!</p>
+              <div className="bg-amber-900/30 rounded-lg p-3 mb-4 md:mb-6 border border-amber-600/30">
+                <p className="text-amber-300 text-sm md:text-base">🚧 More casino games coming soon!</p>
               </div>
               
-              <div className="max-w-lg mx-auto space-y-6">
+              <div className="max-w-lg mx-auto space-y-4 md:space-y-6">
                 <div>
-                  <label className="block text-amber-200 mb-2 text-xl">Bet Amount (SHIT)</label>
+                  <label className="block text-amber-200 mb-2 text-lg md:text-xl">Bet Amount (SHIT)</label>
                   <input
                     type="number"
                     value={betAmount}
@@ -606,7 +709,7 @@ export default function PoopChainApp() {
                     min={minBet}
                     max={currentMaxBet}
                     disabled={contractCasinoLoading || casinoState.isFlipping || casinoState.gameActive}
-                    className="w-full px-6 py-4 rounded-xl bg-amber-900/50 border border-amber-600/50 text-amber-100 text-center text-xl focus:outline-none focus:border-amber-400 disabled:opacity-50"
+                    className="w-full px-4 md:px-6 py-3 md:py-4 rounded-xl bg-amber-900/50 border border-amber-600/50 text-amber-100 text-center text-lg md:text-xl focus:outline-none focus:border-amber-400 disabled:opacity-50"
                     placeholder={`${minBet} - ${currentMaxBet}`}
                   />
                   
@@ -621,8 +724,8 @@ export default function PoopChainApp() {
                 </div>
                 
                 <div>
-                  <label className="block text-amber-200 mb-4 text-xl">Choose Your Side:</label>
-                  <div className="h-64">
+                  <label className="block text-amber-200 mb-4 text-lg md:text-xl">Choose Your Side:</label>
+                  <div className="h-48 md:h-64">
                     {casinoState.isFlipping ? (
                       <div className="flex items-center justify-center h-full">
                         <img 
@@ -632,31 +735,31 @@ export default function PoopChainApp() {
                         />
                       </div>
                     ) : (
-                      <div className="grid grid-cols-2 gap-6 h-full">
+                      <div className="grid grid-cols-2 gap-3 md:gap-6 h-full">
                         <button
                           onClick={() => setBetChoice(0)}
                           disabled={contractCasinoLoading || casinoState.isFlipping || casinoState.gameActive}
-                          className={`p-8 rounded-xl border-4 transition-all transform hover:scale-105 ${
+                          className={`p-4 md:p-8 rounded-xl border-4 transition-all transform active:scale-95 md:hover:scale-105 ${
                             betChoice === 0
                               ? 'border-pink-400 bg-pink-400/20 text-pink-200 shadow-lg'
                               : 'border-amber-600/50 bg-amber-900/30 text-amber-300 hover:border-pink-400/50'
                           } ${(contractCasinoLoading || casinoState.isFlipping || casinoState.gameActive) ? 'opacity-50 cursor-not-allowed' : ''}`}
                         >
-                          <div className="text-6xl mb-2">🍑</div>
-                          <div className="font-bold text-xl">BUTTS</div>
+                          <div className="text-4xl md:text-6xl mb-1 md:mb-2">🍑</div>
+                          <div className="font-bold text-lg md:text-xl">BUTTS</div>
                         </button>
                         
                         <button
                           onClick={() => setBetChoice(1)}
                           disabled={contractCasinoLoading || casinoState.isFlipping || casinoState.gameActive}
-                          className={`p-8 rounded-xl border-4 transition-all transform hover:scale-105 ${
+                          className={`p-4 md:p-8 rounded-xl border-4 transition-all transform active:scale-95 md:hover:scale-105 ${
                             betChoice === 1
                               ? 'border-amber-600 bg-amber-600/20 text-amber-200 shadow-lg'
                               : 'border-amber-600/50 bg-amber-900/30 text-amber-300 hover:border-amber-600/70'
                           } ${(contractCasinoLoading || casinoState.isFlipping || casinoState.gameActive) ? 'opacity-50 cursor-not-allowed' : ''}`}
                         >
-                          <div className="text-6xl mb-2">💩</div>
-                          <div className="font-bold text-xl">TURDS</div>
+                          <div className="text-4xl md:text-6xl mb-1 md:mb-2">💩</div>
+                          <div className="font-bold text-lg md:text-xl">TURDS</div>
                         </button>
                       </div>
                     )}
@@ -667,7 +770,7 @@ export default function PoopChainApp() {
                   <button
                     onClick={approveShit}
                     disabled={approvalLoading}
-                    className="w-full bg-orange-600 hover:bg-orange-700 disabled:opacity-50 disabled:cursor-not-allowed text-white px-12 py-6 rounded-xl font-bold text-xl transition-all transform hover:scale-105"
+                    className="w-full bg-orange-600 hover:bg-orange-700 disabled:opacity-50 disabled:cursor-not-allowed text-white px-6 md:px-12 py-4 md:py-6 rounded-xl font-bold text-lg md:text-xl transition-all transform active:scale-95 md:hover:scale-105"
                   >
                     {approvalLoading ? 'Approving...' : 'Approve SHIT Tokens First 🔓'}
                   </button>
@@ -682,7 +785,7 @@ export default function PoopChainApp() {
                       parseFloat(betAmount) < minBet || 
                       parseFloat(betAmount) > currentMaxBet
                     }
-                    className="w-full bg-purple-600 hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed text-white px-12 py-6 rounded-xl font-bold text-xl transition-all transform hover:scale-105"
+                    className="w-full bg-purple-600 hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed text-white px-6 md:px-12 py-4 md:py-6 rounded-xl font-bold text-lg md:text-xl transition-all transform active:scale-95 md:hover:scale-105"
                   >
                     {contractCasinoLoading ? 'Processing...' : 
                     casinoState.isFlipping ? 'Flipping...' : 
@@ -690,7 +793,7 @@ export default function PoopChainApp() {
                   </button>
                 )}
                 
-                <p className="text-base text-amber-300">
+                <p className="text-sm md:text-base text-amber-300">
                   {!hasEnoughAllowance 
                     ? 'One-time approval needed to bet SHIT tokens'
                     : 'Cost: 0.005 POL (enters gas lottery!)'
@@ -700,30 +803,30 @@ export default function PoopChainApp() {
             </div>
           )}
           
-          {/* DEX Tab */}
+          {/* DEX Tab (PRESERVED FROM ORIGINAL but made mobile-friendly) */}
           {selectedTab === 'dex' && (
             <div className="text-center">
-              <div className="text-6xl mb-6">🔄</div>
-              <h2 className="text-4xl font-bold text-amber-100 mb-4">PoopDEX</h2>
-              <p className="text-xl text-amber-200 mb-8">Swap POL ↔ SHITCOIN</p>
+              <div className="text-4xl md:text-6xl mb-4 md:mb-6">🔄</div>
+              <h2 className="text-2xl md:text-4xl font-bold text-amber-100 mb-3 md:mb-4">PoopDEX</h2>
+              <p className="text-lg md:text-xl text-amber-200 mb-6 md:mb-8">Swap POL ↔ SHITCOIN</p>
               
-              <div className="max-w-lg mx-auto space-y-6">
-                <div className="bg-amber-900/50 rounded-xl p-8 border border-amber-600/50">
-                  <div className="flex justify-between items-center mb-6">
-                    <span className="text-amber-200 text-xl">From:</span>
+              <div className="max-w-lg mx-auto space-y-4 md:space-y-6">
+                <div className="bg-amber-900/50 rounded-xl p-4 md:p-8 border border-amber-600/50">
+                  <div className="flex justify-between items-center mb-4 md:mb-6">
+                    <span className="text-amber-200 text-lg md:text-xl">From:</span>
                     <button
                       onClick={() => setSwapDirection(swapDirection === 'matic-to-shit' ? 'shit-to-matic' : 'matic-to-shit')}
-                      className="text-amber-400 hover:text-amber-100 transition-colors text-xl"
+                      className="text-amber-400 hover:text-amber-100 transition-colors text-lg md:text-xl"
                       disabled={swapLoading}
                     >
                       🔄 Flip
                     </button>
                   </div>
                   
-                  <div className="mb-6">
+                  <div className="mb-4 md:mb-6">
                     <div className="flex items-center gap-3 mb-3">
-                      <div className="text-3xl">{swapDirection === 'matic-to-shit' ? '🟣' : '💩'}</div>
-                      <span className="text-amber-100 font-bold text-xl">
+                      <div className="text-2xl md:text-3xl">{swapDirection === 'matic-to-shit' ? '🟣' : '💩'}</div>
+                      <span className="text-amber-100 font-bold text-lg md:text-xl">
                         {swapDirection === 'matic-to-shit' ? 'POL' : 'SHIT'}
                       </span>
                     </div>
@@ -732,21 +835,21 @@ export default function PoopChainApp() {
                       value={swapAmount}
                       onChange={(e) => setSwapAmount(e.target.value)}
                       disabled={swapLoading}
-                      className="w-full px-6 py-4 rounded-lg bg-amber-900/70 border border-amber-600/50 text-amber-100 text-xl focus:outline-none focus:border-amber-400 disabled:opacity-50"
+                      className="w-full px-4 md:px-6 py-3 md:py-4 rounded-lg bg-amber-900/70 border border-amber-600/50 text-amber-100 text-lg md:text-xl focus:outline-none focus:border-amber-400 disabled:opacity-50"
                       placeholder="0.0"
                     />
                   </div>
                   
-                  <div className="text-center text-amber-400 text-3xl mb-6">⬇️</div>
+                  <div className="text-center text-amber-400 text-2xl md:text-3xl mb-4 md:mb-6">⬇️</div>
                   
                   <div>
                     <div className="flex items-center gap-3 mb-3">
-                      <div className="text-3xl">{swapDirection === 'matic-to-shit' ? '💩' : '🟣'}</div>
-                      <span className="text-amber-100 font-bold text-xl">
+                      <div className="text-2xl md:text-3xl">{swapDirection === 'matic-to-shit' ? '💩' : '🟣'}</div>
+                      <span className="text-amber-100 font-bold text-lg md:text-xl">
                         {swapDirection === 'matic-to-shit' ? 'SHIT' : 'POL'}
                       </span>
                     </div>
-                    <div className="w-full px-6 py-4 rounded-lg bg-amber-900/30 border border-amber-600/30 text-amber-300 text-xl font-mono">
+                    <div className="w-full px-4 md:px-6 py-3 md:py-4 rounded-lg bg-amber-900/30 border border-amber-600/30 text-amber-300 text-lg md:text-xl font-mono">
                       {getSwapOutput}
                     </div>
                     {dexQuote && swapAmount && parseFloat(swapAmount) > 0 && (
@@ -768,7 +871,7 @@ export default function PoopChainApp() {
                   <button
                     onClick={approveDex}
                     disabled={dexApprovalLoading}
-                    className="w-full bg-orange-600 hover:bg-orange-700 disabled:opacity-50 disabled:cursor-not-allowed text-white px-12 py-6 rounded-xl font-bold text-xl transition-all transform hover:scale-105"
+                    className="w-full bg-orange-600 hover:bg-orange-700 disabled:opacity-50 disabled:cursor-not-allowed text-white px-6 md:px-12 py-4 md:py-6 rounded-xl font-bold text-lg md:text-xl transition-all transform active:scale-95 md:hover:scale-105"
                   >
                     {dexApprovalLoading ? 'Approving...' : 'Approve SHIT for DEX First 🔓'}
                   </button>
@@ -776,53 +879,53 @@ export default function PoopChainApp() {
                   <button
                     onClick={handleSwap}
                     disabled={swapLoading || !swapAmount || parseFloat(swapAmount) <= 0}
-                    className="w-full bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-white px-12 py-6 rounded-xl font-bold text-xl transition-all transform hover:scale-105"
+                    className="w-full bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-white px-6 md:px-12 py-4 md:py-6 rounded-xl font-bold text-lg md:text-xl transition-all transform active:scale-95 md:hover:scale-105"
                   >
                     {swapLoading ? 'Swapping...' : `Swap ${swapDirection === 'matic-to-shit' ? 'POL → SHIT' : 'SHIT → POL'} 💨`}
                   </button>
                 )}
                 
-                {/* Owner controls */}
+                {/* Owner controls (PRESERVED FROM ORIGINAL) */}
                 {isOwner && (
-                  <div className="mb-6">
+                  <div className="mb-4 md:mb-6">
                     <button
                       onClick={() => syncReserves?.()}
                       disabled={syncLoading}
-                      className="bg-yellow-600 hover:bg-yellow-700 disabled:opacity-50 text-white px-6 py-3 rounded-lg font-bold"
+                      className="bg-yellow-600 hover:bg-yellow-700 disabled:opacity-50 text-white px-4 md:px-6 py-2 md:py-3 rounded-lg font-bold text-sm md:text-base"
                     >
                       {syncLoading ? 'Syncing...' : 'Sync Reserves 🔄'}
                     </button>
                   </div>
                 )}
                 
-                {/* Optimized liquidity display */}
+                {/* Mobile-optimized liquidity display (PRESERVED FROM ORIGINAL) */}
                 {dexReserves && (
-                  <div className="bg-amber-900/30 rounded-lg p-4 mb-6 border border-amber-600/30">
-                    <div className="flex justify-between items-center mb-3">
-                      <h4 className="text-amber-100 font-bold">💧 Liquidity Pool</h4>
+                  <div className="bg-amber-900/30 rounded-lg p-3 md:p-4 mb-4 md:mb-6 border border-amber-600/30">
+                    <div className="flex justify-between items-center mb-2 md:mb-3">
+                      <h4 className="text-amber-100 font-bold text-sm md:text-base">💧 Liquidity Pool</h4>
                       <button 
                         onClick={refreshDexReserves}
-                        className="text-amber-400 hover:text-amber-100 text-sm"
+                        className="text-amber-400 hover:text-amber-100 text-xs md:text-sm"
                         title="Refresh reserves"
                         disabled={dexReservesLoading}
                       >
                         {dexReservesLoading ? '⏳' : '🔄'}
                       </button>
                     </div>
-                    <div className="grid grid-cols-2 gap-4 text-center">
+                    <div className="grid grid-cols-2 gap-2 md:gap-4 text-center">
                       <div>
-                        <div className="text-blue-300 font-bold text-lg">{dexReserves.matic.toFixed(2)} POL</div>
-                        <div className="text-amber-400 text-sm">POL Reserve</div>
+                        <div className="text-blue-300 font-bold text-sm md:text-lg">{dexReserves.matic.toFixed(2)} POL</div>
+                        <div className="text-amber-400 text-xs md:text-sm">POL Reserve</div>
                       </div>
                       <div>
-                        <div className="text-orange-300 font-bold text-lg">{dexReserves.shit.toFixed(0)} SHIT</div>
-                        <div className="text-amber-400 text-sm">SHIT Reserve</div>
+                        <div className="text-orange-300 font-bold text-sm md:text-lg">{dexReserves.shit.toFixed(0)} SHIT</div>
+                        <div className="text-amber-400 text-xs md:text-sm">SHIT Reserve</div>
                       </div>
                     </div>
                   </div>
                 )}
                 
-                <p className="text-base text-amber-300">
+                <p className="text-sm md:text-base text-amber-300">
                   {swapDirection === 'shit-to-matic' && !hasEnoughDexAllowance
                     ? 'One-time approval needed to swap SHIT tokens'
                     : 'Fee: 2.5% (goes to gas lottery pool!)'
@@ -832,36 +935,36 @@ export default function PoopChainApp() {
             </div>
           )}
           
-          {/* Gas Pool Tab */}
+          {/* Gas Pool Tab (PRESERVED FROM ORIGINAL) */}
           {selectedTab === 'gaspool' && (
             <GasPoolDashboard />
           )}
 
-          {/* NEW: Add this section */}
+          {/* Leaderboard Tab (PRESERVED FROM ORIGINAL) */}
           {selectedTab === 'leaderboard' && (
             <LeaderboardTab />
           )}
         </div>
         
-        {/* Stats Section - Only show on faucet tab */}
+        {/* Mobile-optimized Stats Section - Only show on faucet tab (PRESERVED FROM ORIGINAL) */}
         {selectedTab === 'faucet' && (
-          <div className="mt-6 grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="bg-amber-800/20 backdrop-blur-lg rounded-xl p-4 border border-amber-600/30 text-center">
-              <div className="text-2xl mb-1">⛽</div>
-              <div className="text-amber-100 font-bold text-lg">Gas Lottery</div>
-              <div className="text-amber-300 text-sm">50% chance of refund</div>
+          <div className="mt-4 md:mt-6 grid grid-cols-1 sm:grid-cols-3 gap-3 md:gap-4">
+            <div className="bg-amber-800/20 backdrop-blur-lg rounded-xl p-3 md:p-4 border border-amber-600/30 text-center">
+              <div className="text-xl md:text-2xl mb-1">⛽</div>
+              <div className="text-amber-100 font-bold text-sm md:text-lg">Gas Lottery</div>
+              <div className="text-amber-300 text-xs md:text-sm">50% chance of refund</div>
             </div>
             
-            <div className="bg-amber-800/20 backdrop-blur-lg rounded-xl p-4 border border-amber-600/30 text-center">
-              <div className="text-2xl mb-1">🔥</div>
-              <div className="text-amber-100 font-bold text-lg">Deflationary</div>
-              <div className="text-amber-300 text-sm">Lost bets burn tokens</div>
+            <div className="bg-amber-800/20 backdrop-blur-lg rounded-xl p-3 md:p-4 border border-amber-600/30 text-center">
+              <div className="text-xl md:text-2xl mb-1">🔥</div>
+              <div className="text-amber-100 font-bold text-sm md:text-lg">Deflationary</div>
+              <div className="text-amber-300 text-xs md:text-sm">Lost bets burn tokens</div>
             </div>
             
-            <div className="bg-amber-800/20 backdrop-blur-lg rounded-xl p-4 border border-amber-600/30 text-center">
-              <div className="text-2xl mb-1">💨</div>
-              <div className="text-amber-100 font-bold text-lg">Fart Sounds</div>
-              <div className="text-amber-300 text-sm">
+            <div className="bg-amber-800/20 backdrop-blur-lg rounded-xl p-3 md:p-4 border border-amber-600/30 text-center">
+              <div className="text-xl md:text-2xl mb-1">💨</div>
+              <div className="text-amber-100 font-bold text-sm md:text-lg">Fart Sounds</div>
+              <div className="text-amber-300 text-xs md:text-sm">
                 <button 
                   onClick={() => {
                     console.log('🔊 Test fart button clicked');
@@ -876,32 +979,32 @@ export default function PoopChainApp() {
           </div>
         )}
 
-        {/* Minting & Economics Stats - Show on faucet tab */}
+        {/* Mobile-optimized Economics Stats - Show on faucet tab (PRESERVED FROM ORIGINAL) */}
         {selectedTab === 'faucet' && (
-          <div className="mt-6">
-            <h3 className="text-2xl font-bold text-amber-100 mb-4 text-center">Token Economics</h3>
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-              <div className="bg-amber-800/20 backdrop-blur-lg rounded-xl p-4 border border-amber-600/30 text-center">
-                <div className="text-2xl mb-1">🏭</div>
-                <div className="text-amber-100 font-bold text-lg">Auto-Minting</div>
-                <div className="text-amber-300 text-sm">{totalMinted.toFixed(0)} total minted</div>
+          <div className="mt-4 md:mt-6">
+            <h3 className="text-xl md:text-2xl font-bold text-amber-100 mb-3 md:mb-4 text-center">Token Economics</h3>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
+              <div className="bg-amber-800/20 backdrop-blur-lg rounded-xl p-3 md:p-4 border border-amber-600/30 text-center">
+                <div className="text-lg md:text-2xl mb-1">🏭</div>
+                <div className="text-amber-100 font-bold text-sm md:text-lg">Auto-Minting</div>
+                <div className="text-amber-300 text-xs md:text-sm">{totalMinted.toFixed(0)} total minted</div>
                 <div className="text-amber-400 text-xs">{dailyMintingUsed.toFixed(0)}/{dailyMintingLimit.toFixed(0)} today</div>
               </div>
               
-              <div className="bg-amber-800/20 backdrop-blur-lg rounded-xl p-4 border border-amber-600/30 text-center">
-                <div className="text-2xl mb-1">🏦</div>
-                <div className="text-amber-100 font-bold text-lg">House Balance</div>
-                <div className="text-amber-300 text-sm">{houseBalance.toFixed(0)} SHIT</div>
+              <div className="bg-amber-800/20 backdrop-blur-lg rounded-xl p-3 md:p-4 border border-amber-600/30 text-center">
+                <div className="text-lg md:text-2xl mb-1">🏦</div>
+                <div className="text-amber-100 font-bold text-sm md:text-lg">House Balance</div>
+                <div className="text-amber-300 text-xs md:text-sm">{houseBalance.toFixed(0)} SHIT</div>
                 <div className="text-amber-400 text-xs">Max bet: {currentMaxBet.toFixed(0)}</div>
               </div>
               
-              <div className="bg-amber-800/20 backdrop-blur-lg rounded-xl p-4 border border-amber-600/30 text-center">
-                <div className="text-2xl mb-1">🤖</div>
-                <div className="text-amber-100 font-bold text-lg">Auto-Refill</div>
-                <div className={`text-sm ${needsRefill ? 'text-green-300' : 'text-amber-300'}`}>
+              <div className="bg-amber-800/20 backdrop-blur-lg rounded-xl p-3 md:p-4 border border-amber-600/30 text-center">
+                <div className="text-lg md:text-2xl mb-1">🤖</div>
+                <div className="text-amber-100 font-bold text-sm md:text-lg">Auto-Refill</div>
+                <div className={`text-xs md:text-sm ${needsRefill ? 'text-green-300' : 'text-amber-300'}`}>
                   {needsRefill ? 'Ready!' : 'Monitoring'}
                 </div>
-                {/* Show countdown timer when monitoring */}
+                {/* Show countdown timer when monitoring (PRESERVED FROM ORIGINAL) */}
                 {!needsRefill && displayRefillTime > 0 && (
                   <div className="text-xs text-amber-400 mt-1 font-mono">
                     {formatTimeRemaining(displayRefillTime)}
@@ -909,19 +1012,24 @@ export default function PoopChainApp() {
                 )}
               </div>
               
-              <div className="bg-amber-800/20 backdrop-blur-lg rounded-xl p-4 border border-amber-600/30 text-center">
-                <div className="text-2xl mb-1">♾️</div>
-                <div className="text-amber-100 font-bold text-lg">Sustainable</div>
-                <div className="text-amber-300 text-sm">Unlimited operation</div>
+              <div className="bg-amber-800/20 backdrop-blur-lg rounded-xl p-3 md:p-4 border border-amber-600/30 text-center">
+                <div className="text-lg md:text-2xl mb-1">♾️</div>
+                <div className="text-amber-100 font-bold text-sm md:text-lg">Sustainable</div>
+                <div className="text-amber-300 text-xs md:text-sm">Unlimited operation</div>
                 <div className="text-amber-400 text-xs">Self-balancing supply</div>
               </div>
             </div>
           </div>
         )}
+
+        {/* Mobile ConnectButton at bottom (NEW) */}
+        <div className="md:hidden mt-6 text-center">
+          <ConnectButton />
+        </div>
       </div>
     </div>
   );
 }
 
-// Export fart system for use in hooks
+// Export fart system for use in hooks (PRESERVED FROM ORIGINAL)
 export { fartSystem };
