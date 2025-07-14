@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { Coins, Gamepad2, RefreshCw, Volume2, Wallet, Fuel } from 'lucide-react';
+import { Coins, Gamepad2, RefreshCw, Volume2, Wallet, Fuel, Trophy } from 'lucide-react';
 import { useAccount } from 'wagmi';
 import { ConnectButton } from '@rainbow-me/rainbowkit';
 import { formatEther } from 'viem';
@@ -31,6 +31,7 @@ import {
 
 // Import the new component
 import GasPoolDashboard from './GasPoolDashboard';
+import LeaderboardTab from './LeaderboardTab';
 
 // FIXED: Global fart system - make it actually work
 class FartSoundSystem {
@@ -524,6 +525,7 @@ export default function PoopChainApp() {
             { id: 'casino', label: 'Casino', icon: Gamepad2 },
             { id: 'dex', label: 'DEX', icon: RefreshCw },
             { id: 'gaspool', label: 'Gas Pool', icon: Fuel },
+            { id: 'leaderboard', label: 'Leaderboard', icon: Trophy },
           ].map(({ id, label, icon }) => {
             const Icon = icon as React.ElementType;
             return (
@@ -833,6 +835,11 @@ export default function PoopChainApp() {
           {/* Gas Pool Tab */}
           {selectedTab === 'gaspool' && (
             <GasPoolDashboard />
+          )}
+
+          {/* NEW: Add this section */}
+          {selectedTab === 'leaderboard' && (
+            <LeaderboardTab />
           )}
         </div>
         
