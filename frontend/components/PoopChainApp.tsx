@@ -33,7 +33,7 @@ import {
 import GasPoolDashboard from './GasPoolDashboard';
 import LeaderboardTab from './LeaderboardTab';
 
-// FIXED: Global fart system - make it actually work (PRESERVED FROM ORIGINAL)
+// FIXED: Global fart system - make it actually work
 class FartSoundSystem {
   private audioCache: Map<string, HTMLAudioElement> = new Map();
   private isInitialized = false;
@@ -114,10 +114,10 @@ class FartSoundSystem {
   }
 }
 
-// Create global instance (PRESERVED FROM ORIGINAL)
+// Create global instance
 const fartSystem = new FartSoundSystem();
 
-// Make it globally available for hooks (PRESERVED FROM ORIGINAL)
+// Make it globally available for hooks
 if (typeof window !== 'undefined') {
   (window as any).fartSystem = fartSystem;
 }
@@ -194,7 +194,7 @@ const MobileNav = ({
   );
 };
 
-// Toast system (PRESERVED FROM ORIGINAL with mobile improvements)
+// Toast system
 const useToast = () => {
   const [toasts, setToasts] = useState<Array<{id: number, message: string, type: 'success' | 'error', isExiting: boolean}>>([]);
 
@@ -246,71 +246,92 @@ const Toast = ({ toast, onClose }: { toast: any, onClose: () => void }) => (
 export default function PoopChainApp() {
   const { address, isConnected } = useAccount();
   
-  // ✅ NEW: Optimized data fetching with smart caching (PRESERVED FROM ORIGINAL)
+  // ✅ ENHANCED: Optimized data fetching with smart caching
   const { data: balances, loading: balancesLoading, refresh: refreshBalances } = useOptimizedBalances(address);
   const { data: casinoStats, loading: casinoLoading } = useOptimizedCasinoStats();
   const { data: faucetState, loading: faucetStateLoading } = useOptimizedFaucetState(address);
   const { data: dexReserves, loading: dexReservesLoading, refresh: refreshDexReserves } = useOptimizedDexReserves();
   
-  // Component state (PRESERVED FROM ORIGINAL)
+  // Component state
   const [isMounted, setIsMounted] = useState(false);
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false); // NEW: Mobile menu state
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false); // Mobile menu state
   const { toasts, showToast, dismissToast } = useToast();
   const [selectedTab, setSelectedTab] = useState('faucet');
-  const [betAmount, setBetAmount] = useState('10');
+  
+  // FIXED: Keep input state separate from displayed values
+  const [betAmountInput, setBetAmountInput] = useState('10');
   const [betChoice, setBetChoice] = useState(0);
-  const [swapAmount, setSwapAmount] = useState('');
+  const [swapAmountInput, setSwapAmountInput] = useState('');
   const [swapDirection, setSwapDirection] = useState<'matic-to-shit' | 'shit-to-matic'>('matic-to-shit');
   
-  // DEX quote with optimized fetching (PRESERVED FROM ORIGINAL)
-  const { data: dexQuote, loading: isLoadingQuote } = useOptimizedDexQuote(swapAmount, swapDirection);
+  // DEX quote with optimized fetching
+  const { data: dexQuote, loading: isLoadingQuote } = useOptimizedDexQuote(swapAmountInput, swapDirection);
   
-  // Transaction event handler (PRESERVED FROM ORIGINAL)
+  // Transaction event handler
   const invalidateTransactionData = useTransactionEvents();
   
-  // Casino state (PRESERVED FROM ORIGINAL)
+  // FIXED: Simplified casino state management
   const [casinoState, setCasinoState] = useState<{
     isFlipping: boolean;
     gameActive: boolean;
-    lastTxHash: string | null;
   }>({
     isFlipping: false,
     gameActive: false,
-    lastTxHash: null,
   });
 
-  // Create stable callbacks for transaction success (PRESERVED FROM ORIGINAL)
+  // FIXED: Enhanced refresh callbacks with proper data invalidation
   const handleFaucetSuccess = useCallback(() => {
+    console.log('✅ Faucet claimed successfully - refreshing data');
     // Invalidate data after successful faucet claim
     invalidateTransactionData('faucet', address);
-  }, [invalidateTransactionData, address]);
+    // Force immediate refresh of balances and faucet state
+    setTimeout(() => {
+      refreshBalances();
+    }, 1000);
+  }, [invalidateTransactionData, address, refreshBalances]);
 
   const handleSwapSuccess = useCallback(() => {
+    console.log('✅ Swap completed successfully - refreshing data');
     // Invalidate data after successful swap
     invalidateTransactionData('dex', address);
-  }, [invalidateTransactionData, address]);
+    // Force immediate refresh of balances and DEX reserves
+    setTimeout(() => {
+      refreshBalances();
+      refreshDexReserves();
+    }, 1000);
+  }, [invalidateTransactionData, address, refreshBalances, refreshDexReserves]);
 
-  // Contract hooks (PRESERVED FROM ORIGINAL)
+  const handleCasinoSuccess = useCallback(() => {
+    console.log('✅ Casino bet completed - refreshing data');
+    // Invalidate data after casino bet
+    invalidateTransactionData('casino', address);
+    // Force immediate refresh of balances and casino stats
+    setTimeout(() => {
+      refreshBalances();
+    }, 1000);
+  }, [invalidateTransactionData, address, refreshBalances]);
+
+  // ENHANCED: Contract hooks with enhanced callbacks
   const { claimFaucet, isLoading: faucetLoading } = useClaimFaucet(showToast, handleFaucetSuccess);
   const { placeBet: contractPlaceBet, isLoading: contractCasinoLoading, gameResult, clearGameResult } = useCasinoBet(showToast, address);
   const { swapMaticForShit, swapShitForMatic, isLoading: swapLoading } = useDexSwap(showToast);
 
-  // Approval hooks (PRESERVED FROM ORIGINAL)
+  // Approval hooks
   const { data: shitAllowance } = useShitAllowance(address);
   const { approveShit, isLoading: approvalLoading } = useApproveShit(showToast);
   const { data: shitDexAllowance } = useShitDexAllowance(address);
   const { approveDex, isLoading: dexApprovalLoading } = useApproveDex(showToast);
   
-  // Other hooks (PRESERVED FROM ORIGINAL)
+  // Other hooks
   const { data: mintingStats } = useMintingStats();
   const { triggerRefill, isLoading: refillLoading } = useManualRefill(showToast);
   const { data: dexOwner } = useDexOwner();
   const { syncReserves, isLoading: syncLoading } = useSyncReserves(showToast);
 
-  // Check if current user is the owner (PRESERVED FROM ORIGINAL)
+  // Check if current user is the owner
   const isOwner = address && dexOwner && address.toLowerCase() === dexOwner.toLowerCase();
 
-  // Extract values with fallbacks (PRESERVED FROM ORIGINAL)
+  // Extract values with fallbacks
   const polBalance = balances?.pol || '0.0000';
   const shitBalance = balances?.shit || '0';
   const currentMaxBet = casinoStats?.currentMaxBet || 1000;
@@ -325,29 +346,30 @@ export default function PoopChainApp() {
   const dailyMintingUsed = mintingStats ? Number(formatEther(mintingStats[1])) : 0;
   const dailyMintingLimit = mintingStats ? Number(formatEther(mintingStats[2])) : 24000;
 
-  // Approval logic (PRESERVED FROM ORIGINAL)
+  // Approval logic
   const hasEnoughAllowance = useMemo(() => {
-    if (!betAmount || parseFloat(betAmount) <= 0) return true;
+    if (!betAmountInput || parseFloat(betAmountInput) <= 0) return true;
     if (!shitAllowance) return false;
     const allowanceAmount = Number(formatEther(shitAllowance));
-    const betAmountNum = parseFloat(betAmount);
+    const betAmountNum = parseFloat(betAmountInput);
     return allowanceAmount >= betAmountNum && allowanceAmount > 0;
-  }, [shitAllowance, betAmount]);
+  }, [shitAllowance, betAmountInput]);
 
   const hasEnoughDexAllowance = useMemo(() => {
     if (swapDirection === 'matic-to-shit') return true;
-    if (!swapAmount || parseFloat(swapAmount) <= 0) return true;
+    if (!swapAmountInput || parseFloat(swapAmountInput) <= 0) return true;
     if (!shitDexAllowance) return false;
-    return Number(formatEther(shitDexAllowance)) >= parseFloat(swapAmount);
-  }, [shitDexAllowance, swapAmount, swapDirection]);
+    return Number(formatEther(shitDexAllowance)) >= parseFloat(swapAmountInput);
+  }, [shitDexAllowance, swapAmountInput, swapDirection]);
 
-  // Action handlers (PRESERVED FROM ORIGINAL)
+  // Action handlers
   const handleClaimFaucet = useCallback(() => {
     if (!faucetLoading) {
       claimFaucet();
     }
   }, [claimFaucet, faucetLoading]);
 
+  // FIXED: Enhanced casino bet handler with proper error handling
   const handlePlaceBet = useCallback(() => {
     if (!hasEnoughAllowance) {
       showToast('❌ Please approve SHIT tokens first!', 'error');
@@ -358,54 +380,49 @@ export default function PoopChainApp() {
       return;
     }
     
-    const betAmountNum = parseFloat(betAmount);
-    if (!betAmount || betAmountNum < minBet || betAmountNum > currentMaxBet) {
+    const betAmountNum = parseFloat(betAmountInput);
+    if (!betAmountInput || betAmountNum < minBet || betAmountNum > currentMaxBet) {
       showToast('❌ Invalid bet amount!', 'error');
       return;
     }
     
     clearGameResult();
-    setCasinoState(prev => ({ ...prev, gameActive: true }));
-    contractPlaceBet(betAmount, betChoice);
-  }, [contractPlaceBet, betAmount, betChoice, contractCasinoLoading, casinoState.isFlipping, casinoState.gameActive, hasEnoughAllowance, minBet, currentMaxBet, showToast, clearGameResult]);
+    setCasinoState({ isFlipping: false, gameActive: true });
+    contractPlaceBet(betAmountInput, betChoice);
+  }, [contractPlaceBet, betAmountInput, betChoice, contractCasinoLoading, casinoState.isFlipping, casinoState.gameActive, hasEnoughAllowance, minBet, currentMaxBet, showToast, clearGameResult]);
 
+  // FIXED: Enhanced swap handler
   const handleSwap = useCallback(() => {
-    if (!swapLoading && swapAmount && parseFloat(swapAmount) > 0) {
+    if (!swapLoading && swapAmountInput && parseFloat(swapAmountInput) > 0) {
       if (swapDirection === 'matic-to-shit') {
-        swapMaticForShit(swapAmount, '0');
+        swapMaticForShit(swapAmountInput, '0');
       } else {
-        swapShitForMatic(swapAmount, '0');
+        swapShitForMatic(swapAmountInput, '0');
       }
-      // Invalidate data after successful swap - will be handled by the swap hook's success callback
-      setTimeout(handleSwapSuccess, 2000);
+      // The handleSwapSuccess callback will be triggered by the hook's success handler
     }
-  }, [swapLoading, swapAmount, swapDirection, swapMaticForShit, swapShitForMatic, handleSwapSuccess]);
+  }, [swapLoading, swapAmountInput, swapDirection, swapMaticForShit, swapShitForMatic]);
 
-  // Casino game result handler (PRESERVED FROM ORIGINAL - this was MISSING!)
+  // FIXED: Enhanced casino game result handler with proper state management
   useEffect(() => {
     if (gameResult && !contractCasinoLoading && casinoState.gameActive && !casinoState.isFlipping) {
-      console.log('🎲 Starting casino animation with result:', gameResult);
-      
       const result = { ...gameResult };
       
-      setCasinoState(prev => ({ 
-        ...prev, 
+      setCasinoState({ 
         isFlipping: true,
         gameActive: false
-      }));
+      });
       
       clearGameResult();
       
       setTimeout(() => {
         if (result.won) {
-          console.log('🔊 Playing win fart');
           fartSystem.playFart('win_fart');
           const message = result.gasLotteryWon 
             ? `🎉 JACKPOT! Won ${result.payout} SHIT + Gas Refund!`
             : `🎉 You won ${result.payout} SHIT!`;
           showToast(message);
         } else {
-          console.log('🔊 Playing lose fart');
           fartSystem.playFart('lose_fart');
           const message = result.gasLotteryWon
             ? '💸 Lost the bet, but won gas refund!'
@@ -413,22 +430,41 @@ export default function PoopChainApp() {
           showToast(message, result.gasLotteryWon ? 'success' : 'error');
         }
         
+        // Reset casino state
         setCasinoState({
           isFlipping: false,
           gameActive: false,
-          lastTxHash: null,
         });
         
-        // Invalidate casino and balance data
-        invalidateTransactionData('casino', address);
+        // Trigger data refresh
+        handleCasinoSuccess();
       }, 3000);
     }
-  }, [gameResult, contractCasinoLoading, casinoState.gameActive, casinoState.isFlipping, clearGameResult, showToast, invalidateTransactionData, address]);
+  }, [gameResult, contractCasinoLoading, casinoState.gameActive, casinoState.isFlipping, clearGameResult, showToast, handleCasinoSuccess]);
 
-  // Timer state for faucet countdown (PRESERVED FROM ORIGINAL - this was MISSING!)
+  // FIXED: Handle transaction cancellation/failure for casino
+  useEffect(() => {
+    // If we're waiting for a transaction but it's no longer loading and there's no result,
+    // and no transaction is in progress, the user probably cancelled or the transaction failed
+    if (casinoState.gameActive && !contractCasinoLoading && !gameResult) {
+      // Add a small delay to avoid premature state reset
+      const timeoutId = setTimeout(() => {
+        if (casinoState.gameActive && !contractCasinoLoading && !gameResult) {
+          setCasinoState({
+            isFlipping: false,
+            gameActive: false,
+          });
+        }
+      }, 3000); // Wait 3 seconds before resetting to avoid premature resets
+
+      return () => clearTimeout(timeoutId);
+    }
+  }, [casinoState.gameActive, contractCasinoLoading, gameResult]);
+
+  // Timer state for faucet countdown
   const [displayTime, setDisplayTime] = useState(timeUntilClaim);
 
-  // Timer state for refill countdown (PRESERVED FROM ORIGINAL - this was MISSING!)
+  // Timer state for refill countdown
   const [displayRefillTime, setDisplayRefillTime] = useState(timeUntilRefill);
 
   useEffect(() => {
@@ -462,27 +498,27 @@ export default function PoopChainApp() {
     }
   };
 
-  // DEX output calculation (PRESERVED FROM ORIGINAL)
+  // DEX output calculation
   const getSwapOutput = useMemo(() => {
-    if (!dexQuote || !swapAmount || parseFloat(swapAmount) <= 0) return '0.0';
+    if (!dexQuote || !swapAmountInput || parseFloat(swapAmountInput) <= 0) return '0.0';
     
     const outputAmount = Number(dexQuote.shitOut);
     return swapDirection === 'matic-to-shit' 
       ? outputAmount.toFixed(0) 
       : outputAmount.toFixed(4);
-  }, [swapAmount, dexQuote, swapDirection]);
+  }, [swapAmountInput, dexQuote, swapDirection]);
 
-  // Mount effect (PRESERVED FROM ORIGINAL)
+  // Mount effect
   useEffect(() => {
     setIsMounted(true);
   }, []);
 
-  // Close mobile menu when tab changes (NEW)
+  // Close mobile menu when tab changes
   useEffect(() => {
     setMobileMenuOpen(false);
   }, [selectedTab]);
 
-  // Loading state (PRESERVED FROM ORIGINAL but made mobile-friendly)
+  // Loading state - mobile-friendly
   if (!isMounted) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-amber-900 via-yellow-800 to-orange-900 flex items-center justify-center p-4">
@@ -495,7 +531,7 @@ export default function PoopChainApp() {
     );
   }
 
-  // Not connected state (FIXED: Restore original desktop sizing)
+  // Not connected state - mobile-friendly
   if (!isConnected) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-amber-900 via-yellow-800 to-orange-900 flex items-center justify-center p-4">
@@ -570,7 +606,7 @@ export default function PoopChainApp() {
         setIsOpen={setMobileMenuOpen}
       />
       
-      {/* Header (PRESERVED FROM ORIGINAL but made mobile-friendly) */}
+      {/* Header - Mobile-friendly */}
       <div className="bg-amber-800/30 backdrop-blur-lg border-b border-amber-600/30 sticky top-0 z-30">
         <div className="max-w-6xl mx-auto px-4 md:px-6 py-3 md:py-4 flex justify-between items-center">
           <div className="flex items-center gap-3 md:gap-6">
@@ -620,7 +656,7 @@ export default function PoopChainApp() {
         </div>
       </div>
       
-      {/* Navigation (PRESERVED FROM ORIGINAL) */}
+      {/* Navigation - Desktop only */}
       <div className="max-w-6xl mx-auto px-4 md:px-6 py-4 md:py-6">
         <div className="hidden md:flex gap-4 mb-8">
           {[
@@ -648,10 +684,10 @@ export default function PoopChainApp() {
           })}
         </div>
         
-        {/* Content (PRESERVED FROM ORIGINAL but made mobile-friendly) */}
+        {/* Content - Mobile-friendly */}
         <div className="bg-amber-800/20 backdrop-blur-lg rounded-2xl md:rounded-3xl p-4 md:p-6 border border-amber-600/30">
           
-          {/* Faucet Tab (PRESERVED FROM ORIGINAL but made mobile-friendly) */}
+          {/* Faucet Tab - Mobile-friendly */}
           {selectedTab === 'faucet' && (
             <div className="text-center">
               <div className="text-4xl md:text-6xl mb-4 md:mb-6">🚰</div>
@@ -689,7 +725,7 @@ export default function PoopChainApp() {
             </div>
           )}
           
-          {/* Casino Tab (PRESERVED FROM ORIGINAL but made mobile-friendly) */}
+          {/* Casino Tab - Mobile-friendly */}
           {selectedTab === 'casino' && (
             <div className="text-center">
               <div className="text-4xl md:text-6xl mb-4 md:mb-6">🎲</div>
@@ -704,8 +740,8 @@ export default function PoopChainApp() {
                   <label className="block text-amber-200 mb-2 text-lg md:text-xl">Bet Amount (SHIT)</label>
                   <input
                     type="number"
-                    value={betAmount}
-                    onChange={(e) => setBetAmount(e.target.value)}
+                    value={betAmountInput}
+                    onChange={(e) => setBetAmountInput(e.target.value)}
                     min={minBet}
                     max={currentMaxBet}
                     disabled={contractCasinoLoading || casinoState.isFlipping || casinoState.gameActive}
@@ -781,15 +817,19 @@ export default function PoopChainApp() {
                       contractCasinoLoading || 
                       casinoState.isFlipping || 
                       casinoState.gameActive ||
-                      !betAmount || 
-                      parseFloat(betAmount) < minBet || 
-                      parseFloat(betAmount) > currentMaxBet
+                      !betAmountInput || 
+                      parseFloat(betAmountInput) < minBet || 
+                      parseFloat(betAmountInput) > currentMaxBet
                     }
                     className="w-full bg-purple-600 hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed text-white px-6 md:px-12 py-4 md:py-6 rounded-xl font-bold text-lg md:text-xl transition-all transform active:scale-95 md:hover:scale-105"
                   >
-                    {contractCasinoLoading ? 'Processing...' : 
-                    casinoState.isFlipping ? 'Flipping...' : 
-                    `Bet ${betAmount} SHIT on ${betChoice === 0 ? 'BUTTS' : 'TURDS'} 💨`}
+                    {(() => {
+                      // Enhanced button text with better state indication
+                      if (contractCasinoLoading) return 'Processing Transaction...';
+                      if (casinoState.isFlipping) return 'Flipping Coin...';
+                      if (casinoState.gameActive) return 'Waiting for Confirmation...';
+                      return `Bet ${betAmountInput} SHIT on ${betChoice === 0 ? 'BUTTS' : 'TURDS'} 💨`;
+                    })()}
                   </button>
                 )}
                 
@@ -803,7 +843,7 @@ export default function PoopChainApp() {
             </div>
           )}
           
-          {/* DEX Tab (PRESERVED FROM ORIGINAL but made mobile-friendly) */}
+          {/* DEX Tab - Mobile-friendly */}
           {selectedTab === 'dex' && (
             <div className="text-center">
               <div className="text-4xl md:text-6xl mb-4 md:mb-6">🔄</div>
@@ -832,8 +872,8 @@ export default function PoopChainApp() {
                     </div>
                     <input
                       type="number"
-                      value={swapAmount}
-                      onChange={(e) => setSwapAmount(e.target.value)}
+                      value={swapAmountInput}
+                      onChange={(e) => setSwapAmountInput(e.target.value)}
                       disabled={swapLoading}
                       className="w-full px-4 md:px-6 py-3 md:py-4 rounded-lg bg-amber-900/70 border border-amber-600/50 text-amber-100 text-lg md:text-xl focus:outline-none focus:border-amber-400 disabled:opacity-50"
                       placeholder="0.0"
@@ -852,7 +892,7 @@ export default function PoopChainApp() {
                     <div className="w-full px-4 md:px-6 py-3 md:py-4 rounded-lg bg-amber-900/30 border border-amber-600/30 text-amber-300 text-lg md:text-xl font-mono">
                       {getSwapOutput}
                     </div>
-                    {dexQuote && swapAmount && parseFloat(swapAmount) > 0 && (
+                    {dexQuote && swapAmountInput && parseFloat(swapAmountInput) > 0 && (
                       <div className="mt-2 text-center space-y-1">
                         <div className="text-amber-400 text-sm">
                           Fee: {Number(dexQuote.feeAmount).toFixed(swapDirection === 'matic-to-shit' ? 4 : 0)} {swapDirection === 'matic-to-shit' ? 'POL' : 'SHIT'}
@@ -878,14 +918,14 @@ export default function PoopChainApp() {
                 ) : (
                   <button
                     onClick={handleSwap}
-                    disabled={swapLoading || !swapAmount || parseFloat(swapAmount) <= 0}
+                    disabled={swapLoading || !swapAmountInput || parseFloat(swapAmountInput) <= 0}
                     className="w-full bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-white px-6 md:px-12 py-4 md:py-6 rounded-xl font-bold text-lg md:text-xl transition-all transform active:scale-95 md:hover:scale-105"
                   >
                     {swapLoading ? 'Swapping...' : `Swap ${swapDirection === 'matic-to-shit' ? 'POL → SHIT' : 'SHIT → POL'} 💨`}
                   </button>
                 )}
                 
-                {/* Owner controls (PRESERVED FROM ORIGINAL) */}
+                {/* Owner controls */}
                 {isOwner && (
                   <div className="mb-4 md:mb-6">
                     <button
@@ -898,7 +938,7 @@ export default function PoopChainApp() {
                   </div>
                 )}
                 
-                {/* Mobile-optimized liquidity display (PRESERVED FROM ORIGINAL) */}
+                {/* Mobile-optimized liquidity display */}
                 {dexReserves && (
                   <div className="bg-amber-900/30 rounded-lg p-3 md:p-4 mb-4 md:mb-6 border border-amber-600/30">
                     <div className="flex justify-between items-center mb-2 md:mb-3">
@@ -935,18 +975,18 @@ export default function PoopChainApp() {
             </div>
           )}
           
-          {/* Gas Pool Tab (PRESERVED FROM ORIGINAL) */}
+          {/* Gas Pool Tab */}
           {selectedTab === 'gaspool' && (
             <GasPoolDashboard />
           )}
 
-          {/* Leaderboard Tab (PRESERVED FROM ORIGINAL) */}
+          {/* Leaderboard Tab */}
           {selectedTab === 'leaderboard' && (
             <LeaderboardTab />
           )}
         </div>
         
-        {/* Mobile-optimized Stats Section - Only show on faucet tab (PRESERVED FROM ORIGINAL) */}
+        {/* Mobile-optimized Stats Section - Only show on faucet tab */}
         {selectedTab === 'faucet' && (
           <div className="mt-4 md:mt-6 grid grid-cols-1 sm:grid-cols-3 gap-3 md:gap-4">
             <div className="bg-amber-800/20 backdrop-blur-lg rounded-xl p-3 md:p-4 border border-amber-600/30 text-center">
@@ -979,7 +1019,7 @@ export default function PoopChainApp() {
           </div>
         )}
 
-        {/* Mobile-optimized Economics Stats - Show on faucet tab (PRESERVED FROM ORIGINAL) */}
+        {/* Mobile-optimized Economics Stats - Show on faucet tab */}
         {selectedTab === 'faucet' && (
           <div className="mt-4 md:mt-6">
             <h3 className="text-xl md:text-2xl font-bold text-amber-100 mb-3 md:mb-4 text-center">Token Economics</h3>
@@ -1004,7 +1044,7 @@ export default function PoopChainApp() {
                 <div className={`text-xs md:text-sm ${needsRefill ? 'text-green-300' : 'text-amber-300'}`}>
                   {needsRefill ? 'Ready!' : 'Monitoring'}
                 </div>
-                {/* Show countdown timer when monitoring (PRESERVED FROM ORIGINAL) */}
+                {/* Show countdown timer when monitoring */}
                 {!needsRefill && displayRefillTime > 0 && (
                   <div className="text-xs text-amber-400 mt-1 font-mono">
                     {formatTimeRemaining(displayRefillTime)}
@@ -1022,7 +1062,7 @@ export default function PoopChainApp() {
           </div>
         )}
 
-        {/* Mobile ConnectButton at bottom (NEW) */}
+        {/* Mobile ConnectButton at bottom */}
         <div className="md:hidden mt-6 text-center">
           <ConnectButton />
         </div>
@@ -1031,5 +1071,5 @@ export default function PoopChainApp() {
   );
 }
 
-// Export fart system for use in hooks (PRESERVED FROM ORIGINAL)
+// Export fart system for use in hooks
 export { fartSystem };

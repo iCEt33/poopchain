@@ -1,4 +1,4 @@
-// hooks/useContracts.ts (wagmi v1 compatible) - COMPLETELY FIXED
+// hooks/useContracts.ts (enhanced) - FIXED transaction handling and state management
 import React from 'react';
 import { useContractRead, useContractWrite, usePrepareContractWrite, useWaitForTransaction } from 'wagmi';
 import { parseEther, formatEther } from 'viem';
@@ -292,7 +292,7 @@ export function useShitDexAllowance(address?: `0x${string}`) {
   });
 }
 
-// Hook to approve SHIT spending for CASINO
+// ENHANCED: Hook to approve SHIT spending for CASINO with better state management
 export function useApproveShit(showToast: (message: string, type?: 'success' | 'error') => void) {
   const { config } = usePrepareContractWrite({
     address: CONTRACT_ADDRESSES.SHITCOIN,
@@ -302,10 +302,22 @@ export function useApproveShit(showToast: (message: string, type?: 'success' | '
     enabled: CONTRACT_ADDRESSES.SHITCOIN !== '0x0000000000000000000000000000000000000000',
   });
 
-  const { write, data, error, isLoading } = useContractWrite(config);
+  const { write, data, error, isLoading } = useContractWrite({
+    ...config,
+    onError: (error) => {
+      console.error('❌ Approval error:', error);
+      showToast('❌ Approval failed! Please try again.', 'error');
+    },
+  });
   
   const { isLoading: isConfirming, isSuccess, isError } = useWaitForTransaction({
     hash: data?.hash,
+    onSuccess: () => {
+      showToast('✅ SHIT tokens approved! You can now place bets.');
+    },
+    onError: () => {
+      showToast('❌ Approval transaction failed!', 'error');
+    },
   });
 
   const approveShit = () => {
@@ -316,21 +328,13 @@ export function useApproveShit(showToast: (message: string, type?: 'success' | '
     write?.();
   };
 
-  React.useEffect(() => {
-    if (isSuccess && data?.hash) {
-      showToast('✅ SHIT tokens approved! You can now place bets.');
-    } else if (isError || error) {
-      showToast('❌ Approval failed! Please try again.', 'error');
-    }
-  }, [isSuccess, isError, data?.hash, error]);
-
   return {
     approveShit,
     isLoading: isLoading || isConfirming,
   };
 }
 
-// Hook to approve DEX spending
+// ENHANCED: Hook to approve DEX spending with better state management
 export function useApproveDex(showToast: (message: string, type?: 'success' | 'error') => void) {
   const { config } = usePrepareContractWrite({
     address: CONTRACT_ADDRESSES.SHITCOIN,
@@ -340,10 +344,22 @@ export function useApproveDex(showToast: (message: string, type?: 'success' | 'e
     enabled: CONTRACT_ADDRESSES.SHITCOIN !== '0x0000000000000000000000000000000000000000',
   });
 
-  const { write, data, error, isLoading } = useContractWrite(config);
+  const { write, data, error, isLoading } = useContractWrite({
+    ...config,
+    onError: (error) => {
+      console.error('❌ DEX approval error:', error);
+      showToast('❌ DEX approval failed! Please try again.', 'error');
+    },
+  });
   
   const { isLoading: isConfirming, isSuccess, isError } = useWaitForTransaction({
     hash: data?.hash,
+    onSuccess: () => {
+      showToast('✅ SHIT approved for DEX! You can now swap.');
+    },
+    onError: () => {
+      showToast('❌ DEX approval transaction failed!', 'error');
+    },
   });
 
   const approveDex = () => {
@@ -353,14 +369,6 @@ export function useApproveDex(showToast: (message: string, type?: 'success' | 'e
     }
     write?.();
   };
-
-  React.useEffect(() => {
-    if (isSuccess && data?.hash) {
-      showToast('✅ SHIT approved for DEX! You can now swap.');
-    } else if (isError || error) {
-      showToast('❌ DEX approval failed! Please try again.', 'error');
-    }
-  }, [isSuccess, isError, data?.hash, error]);
 
   return {
     approveDex,
@@ -377,10 +385,22 @@ export function useManualRefill(showToast: (message: string, type?: 'success' | 
     enabled: CONTRACT_ADDRESSES.CASINO !== '0x0000000000000000000000000000000000000000',
   });
 
-  const { write, data, error, isLoading } = useContractWrite(config);
+  const { write, data, error, isLoading } = useContractWrite({
+    ...config,
+    onError: (error) => {
+      console.error('❌ Refill error:', error);
+      showToast('❌ Refill failed! Casino may not need refilling yet.', 'error');
+    },
+  });
   
   const { isLoading: isConfirming, isSuccess, isError } = useWaitForTransaction({
     hash: data?.hash,
+    onSuccess: () => {
+      showToast('🤖 Casino auto-refilled! 1000 SHIT tokens minted.');
+    },
+    onError: () => {
+      showToast('❌ Refill transaction failed!', 'error');
+    },
   });
 
   const triggerRefill = () => {
@@ -391,24 +411,16 @@ export function useManualRefill(showToast: (message: string, type?: 'success' | 
     write?.();
   };
 
-  React.useEffect(() => {
-    if (isSuccess && data?.hash) {
-      showToast('🤖 Casino auto-refilled! 1000 SHIT tokens minted.');
-    } else if (isError || error) {
-      showToast('❌ Refill failed! Casino may not need refilling yet.', 'error');
-    }
-  }, [isSuccess, isError, data?.hash, error]);
-
   return {
     triggerRefill,
     isLoading: isLoading || isConfirming,
   };
 }
 
-// Hook for faucet claim
+// ENHANCED: Hook for faucet claim with better state management
 export function useClaimFaucet(
   showToast: (message: string, type?: 'success' | 'error') => void,
-  refreshFaucetState?: () => void
+  onSuccess?: () => void
 ) {
   const { config } = usePrepareContractWrite({
     address: CONTRACT_ADDRESSES.SHITCOIN,
@@ -418,10 +430,29 @@ export function useClaimFaucet(
     enabled: CONTRACT_ADDRESSES.SHITCOIN !== '0x0000000000000000000000000000000000000000',
   });
 
-  const { write, data, error, isLoading } = useContractWrite(config);
+  const { write, data, error, isLoading } = useContractWrite({
+    ...config,
+    onError: (error) => {
+      console.error('❌ Faucet claim error:', error);
+      showToast('❌ Faucet claim failed! Please try again.', 'error');
+    },
+  });
   
   const { isLoading: isConfirming, isSuccess, isError } = useWaitForTransaction({
     hash: data?.hash,
+    onSuccess: () => {
+      showToast('💩 Faucet claimed! 1000 SHIT tokens received!');
+      if (typeof fartSystem !== 'undefined') {
+        fartSystem.playFart('faucet_fart');
+      }
+      // Call the success callback to refresh data
+      if (onSuccess) {
+        setTimeout(onSuccess, 1000); // Small delay to ensure blockchain state is updated
+      }
+    },
+    onError: () => {
+      showToast('❌ Faucet claim transaction failed!', 'error');
+    },
   });
 
   const claimFaucet = () => {
@@ -432,28 +463,13 @@ export function useClaimFaucet(
     write?.();
   };
 
-  React.useEffect(() => {
-    if (isSuccess && data?.hash) {
-      showToast('💩 Faucet claimed! 1000 SHIT tokens received!');
-      if (typeof fartSystem !== 'undefined') {
-        fartSystem.playFart('faucet_fart');
-      }
-      // Refresh faucet state after successful claim
-      if (refreshFaucetState) {
-        setTimeout(refreshFaucetState, 2000);
-      }
-    } else if (isError || error) {
-      showToast('❌ Transaction failed! Please try again.', 'error');
-    }
-  }, [isSuccess, isError, data?.hash, error, refreshFaucetState]);
-
   return {
     claimFaucet,
     isLoading: isLoading || isConfirming,
   };
 }
 
-// COMPLETELY FIXED: Casino bet hook with proper state management
+// COMPLETELY REWRITTEN: Casino bet hook with bulletproof state management
 export function useCasinoBet(showToast: (message: string, type?: 'success' | 'error') => void, userAddress?: `0x${string}`) {
   const [betParams, setBetParams] = React.useState<{ betAmount: string; choice: number } | null>(null);
   const [gameResult, setGameResult] = React.useState<{ 
@@ -465,8 +481,9 @@ export function useCasinoBet(showToast: (message: string, type?: 'success' | 'er
     gasLotteryWon: boolean;
   } | null>(null);
   
-  // FIXED: Add state to track transaction lifecycle
-  const [transactionState, setTransactionState] = React.useState<'idle' | 'preparing' | 'waiting' | 'confirming' | 'complete'>('idle');
+  // Enhanced state tracking
+  const [transactionState, setTransactionState] = React.useState<'idle' | 'preparing' | 'waiting' | 'confirming' | 'complete' | 'failed'>('idle');
+  const [lastProcessedTxHash, setLastProcessedTxHash] = React.useState<string | null>(null);
 
   const { config, error: prepareError } = usePrepareContractWrite({
     address: CONTRACT_ADDRESSES.CASINO,
@@ -480,13 +497,15 @@ export function useCasinoBet(showToast: (message: string, type?: 'success' | 'er
   const { write, data, error, isLoading } = useContractWrite({
     ...config,
     onSuccess: (data) => {
-      console.log('✅ Transaction submitted:', data.hash);
       setTransactionState('confirming');
+      setLastProcessedTxHash(data.hash);
     },
     onError: (error) => {
-      console.error('❌ Transaction failed:', error);
-      setTransactionState('idle');
+      setTransactionState('failed');
+      // Reset everything on error
       setBetParams(null);
+      setGameResult(null);
+      setLastProcessedTxHash(null);
       showToast('❌ Transaction failed! Please try again.', 'error');
     },
   });
@@ -494,36 +513,38 @@ export function useCasinoBet(showToast: (message: string, type?: 'success' | 'er
   const { isLoading: isConfirming, isSuccess, isError } = useWaitForTransaction({
     hash: data?.hash,
     onSuccess: () => {
-      console.log('✅ Transaction confirmed, waiting for game result...');
       setTransactionState('complete');
+      // Don't reset state here - let the event handler do it
     },
     onError: () => {
-      console.error('❌ Transaction confirmation failed');
-      setTransactionState('idle');
+      setTransactionState('failed');
       setBetParams(null);
+      setGameResult(null);
+      setLastProcessedTxHash(null);
       showToast('❌ Transaction failed! Please try again.', 'error');
     },
   });
 
-  // Listen to GameResult events
+  // Enhanced event listener with better error handling
   React.useEffect(() => {
     if (!userAddress || CONTRACT_ADDRESSES.CASINO === '0x0000000000000000000000000000000000000000') {
-        return;
+      return;
     }
 
     let contract: any;
+    let isActive = true;
 
     const setupEventListener = async () => {
-        try {
+      try {
         // Use ethers v5 syntax
         const provider = new ethers.providers.JsonRpcProvider('https://polygon.drpc.org');
 
         contract = new ethers.Contract(
-            CONTRACT_ADDRESSES.CASINO,
-            [
+          CONTRACT_ADDRESSES.CASINO,
+          [
             'event GameResult(address indexed player, uint256 betAmount, bool playerWon, string playerChoice, string result, uint256 payout, bool gasLotteryWon)'
-            ],
-            provider
+          ],
+          provider
         );
 
         // Listen for GameResult events for this user
@@ -532,65 +553,68 @@ export function useCasinoBet(showToast: (message: string, type?: 'success' | 'er
         let processedTxHashes = new Set<string>();
         
         const handleGameResult = (player: string, betAmount: any, playerWon: boolean, playerChoice: string, result: string, payout: any, gasLotteryWon: boolean, event: any) => {
-            console.log('🎯 Ethers GameResult received!', { player, playerWon, playerChoice, result, gasLotteryWon, txHash: event.transactionHash });
-            
-            if (player.toLowerCase() !== userAddress.toLowerCase()) {
-                return;
-            }
+          if (!isActive) return;
+          
+          if (player.toLowerCase() !== userAddress.toLowerCase()) {
+            return;
+          }
 
-            // FIXED: Prevent duplicate processing of same transaction
-            if (processedTxHashes.has(event.transactionHash)) {
-                console.log('⚠️ Duplicate event ignored for tx:', event.transactionHash);
-                return;
-            }
-            processedTxHashes.add(event.transactionHash);
+          // Only process events for our current transaction
+          if (lastProcessedTxHash && event.transactionHash.toLowerCase() !== lastProcessedTxHash.toLowerCase()) {
+            return;
+          }
 
-            // Handle ethers v5 syntax
-            const localFormatEther = ethers.utils.formatEther;
+          // Prevent duplicate processing
+          if (processedTxHashes.has(event.transactionHash)) {
+            return;
+          }
+          processedTxHashes.add(event.transactionHash);
 
-            const payoutFormatted = Number(localFormatEther(payout));
-            
-            setGameResult({
-                won: playerWon,
-                result: playerWon ? "You won!" : "You lost!",
-                payout: payoutFormatted,
-                playerChoice: playerChoice,
-                actualResult: result,
-                gasLotteryWon: gasLotteryWon
-            });
-            
-            setBetParams(null);
-            setTransactionState('idle');
+          // Handle ethers v5 syntax
+          const localFormatEther = ethers.utils.formatEther;
+          const payoutFormatted = Number(localFormatEther(payout));
+          
+          setGameResult({
+            won: playerWon,
+            result: playerWon ? "You won!" : "You lost!",
+            payout: payoutFormatted,
+            playerChoice: playerChoice,
+            actualResult: result,
+            gasLotteryWon: gasLotteryWon
+          });
+          
+          // Clean up state immediately
+          setBetParams(null);
+          setTransactionState('idle');
+          setLastProcessedTxHash(null);
         };
 
         contract.on(eventFilter, handleGameResult);
         
-        console.log('✅ Ethers event listener setup for', userAddress);
-        
         return () => {
-            console.log('🧹 Cleaning up ethers event listener');
-            if (contract) {
-                contract.removeAllListeners();
-            }
+          isActive = false;
+          if (contract) {
+            contract.removeAllListeners();
+          }
         };
         
-        } catch (error) {
-            console.error('❌ Failed to setup ethers event listener:', error);
-            return null;
-        }
+      } catch (error) {
+        return null;
+      }
     };
 
     let cleanup: Promise<(() => void) | null>;
     setupEventListener().then(cleanupFn => {
-        cleanup = Promise.resolve(cleanupFn);
+      cleanup = Promise.resolve(cleanupFn);
     });
 
     return () => {
-        if (cleanup) {
-            cleanup.then(cleanupFn => cleanupFn?.());
-        }
+      isActive = false;
+      if (cleanup) {
+        cleanup.then(cleanupFn => cleanupFn?.());
+      }
     };
-  }, [userAddress, setGameResult, setBetParams, setTransactionState]);
+  }, [userAddress, lastProcessedTxHash]);
 
   const placeBet = (betAmount: string, choice: number) => {
     if (CONTRACT_ADDRESSES.CASINO === '0x0000000000000000000000000000000000000000') {
@@ -598,59 +622,76 @@ export function useCasinoBet(showToast: (message: string, type?: 'success' | 'er
       return;
     }
     
-    console.log('🎲 Placing bet:', { betAmount, choice });
-    
-    // Clear any previous game result and reset state
+    // Clear any previous state
     setGameResult(null);
     setTransactionState('preparing');
+    setLastProcessedTxHash(null);
     setBetParams({ betAmount, choice });
   };
 
-  // FIXED: Only trigger write once when config is ready
+  // Enhanced write trigger with better error handling
   React.useEffect(() => {
     if (betParams && config && write && transactionState === 'preparing' && !isLoading && !isConfirming) {
-      console.log('🎲 Triggering transaction...');
       setTransactionState('waiting');
       try {
         write();
       } catch (err) {
-        console.error('❌ Write failed:', err);
         showToast('❌ Transaction preparation failed!', 'error');
         setBetParams(null);
         setTransactionState('idle');
+        setLastProcessedTxHash(null);
       }
     }
   }, [betParams, config, write, transactionState, isLoading, isConfirming]);
 
-  // FIXED: Handle preparation errors only once
+  // FIXED: Handle the case where transaction is submitted but confirmation is taking time
+  React.useEffect(() => {
+    if (data?.hash && transactionState === 'waiting') {
+      setTransactionState('confirming');
+      setLastProcessedTxHash(data.hash);
+    }
+  }, [data?.hash, transactionState]);
+
+  // Handle preparation errors
   React.useEffect(() => {
     if (prepareError && transactionState === 'preparing') {
-      console.error('❌ Contract preparation error:', prepareError);
       showToast('❌ Contract preparation failed! Check your token balance and allowance.', 'error');
       setBetParams(null);
       setTransactionState('idle');
+      setLastProcessedTxHash(null);
     }
   }, [prepareError, transactionState]);
 
-  // FIXED: Clear everything when user cancels or closes wallet
+  // Handle user cancellation or transaction failure
   React.useEffect(() => {
-    if (error && transactionState === 'waiting') {
-      console.log('❌ User cancelled or transaction failed');
+    if (error && (transactionState === 'waiting' || transactionState === 'preparing')) {
       setBetParams(null);
       setTransactionState('idle');
-      // Don't show toast here - it's handled in onError
+      setLastProcessedTxHash(null);
     }
   }, [error, transactionState]);
 
-  // FIXED: Simple clear function
+  // Auto-reset on failed state
+  React.useEffect(() => {
+    if (transactionState === 'failed') {
+      const timer = setTimeout(() => {
+        setTransactionState('idle');
+      }, 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [transactionState]);
+
   const clearGameResult = () => {
     setGameResult(null);
     setBetParams(null);
     setTransactionState('idle');
+    setLastProcessedTxHash(null);
   };
 
-  // FIXED: Return proper loading state
-  const isReallyLoading = transactionState !== 'idle' && transactionState !== 'complete';
+  // Enhanced loading state that properly reflects the transaction lifecycle
+  const isReallyLoading = transactionState === 'preparing' || 
+                          transactionState === 'waiting' || 
+                          transactionState === 'confirming';
 
   return {
     placeBet,
@@ -660,7 +701,7 @@ export function useCasinoBet(showToast: (message: string, type?: 'success' | 'er
   };
 }
 
-// Hook for DEX swap
+// ENHANCED: Hook for DEX swap with better state management
 export function useDexSwap(showToast: (message: string, type?: 'success' | 'error') => void) {
   const [swapParams, setSwapParams] = React.useState<{ amount: string; direction: string; minOut: string } | null>(null);
 
@@ -681,11 +722,53 @@ export function useDexSwap(showToast: (message: string, type?: 'success' | 'erro
     enabled: swapParams?.direction === 'shit-to-matic' && CONTRACT_ADDRESSES.DEX !== '0x0000000000000000000000000000000000000000',
   });
 
-  const { write: writeMaticSwap, data: maticData, error: maticError, isLoading: maticLoading } = useContractWrite(maticConfig);
-  const { write: writeShitSwap, data: shitData, error: shitError, isLoading: shitLoading } = useContractWrite(shitConfig);
+  const { write: writeMaticSwap, data: maticData, error: maticError, isLoading: maticLoading } = useContractWrite({
+    ...maticConfig,
+    onError: (error) => {
+      console.error('❌ MATIC swap error:', error);
+      showToast('❌ Swap failed! Please try again.', 'error');
+      setSwapParams(null);
+    },
+  });
+
+  const { write: writeShitSwap, data: shitData, error: shitError, isLoading: shitLoading } = useContractWrite({
+    ...shitConfig,
+    onError: (error) => {
+      console.error('❌ SHIT swap error:', error);
+      showToast('❌ Swap failed! Please try again.', 'error');
+      setSwapParams(null);
+    },
+  });
   
-  const { isLoading: isMaticConfirming, isSuccess: isMaticSuccess } = useWaitForTransaction({ hash: maticData?.hash });
-  const { isLoading: isShitConfirming, isSuccess: isShitSuccess } = useWaitForTransaction({ hash: shitData?.hash });
+  const { isLoading: isMaticConfirming, isSuccess: isMaticSuccess } = useWaitForTransaction({
+    hash: maticData?.hash,
+    onSuccess: () => {
+      showToast('🔄 Swap completed successfully!');
+      if (typeof fartSystem !== 'undefined') {
+        fartSystem.playFart('swap_fart');
+      }
+      setSwapParams(null);
+    },
+    onError: () => {
+      showToast('❌ Swap transaction failed!', 'error');
+      setSwapParams(null);
+    },
+  });
+
+  const { isLoading: isShitConfirming, isSuccess: isShitSuccess } = useWaitForTransaction({
+    hash: shitData?.hash,
+    onSuccess: () => {
+      showToast('🔄 Swap completed successfully!');
+      if (typeof fartSystem !== 'undefined') {
+        fartSystem.playFart('swap_fart');
+      }
+      setSwapParams(null);
+    },
+    onError: () => {
+      showToast('❌ Swap transaction failed!', 'error');
+      setSwapParams(null);
+    },
+  });
 
   const swapMaticForShit = (amount: string, minOut: string = '0') => {
     if (CONTRACT_ADDRESSES.DEX === '0x0000000000000000000000000000000000000000') {
@@ -704,17 +787,6 @@ export function useDexSwap(showToast: (message: string, type?: 'success' | 'erro
     setSwapParams({ amount, direction: 'shit-to-matic', minOut });
     setTimeout(() => writeShitSwap?.(), 100);
   };
-
-  React.useEffect(() => {
-    if (isMaticSuccess || isShitSuccess) {
-      showToast('🔄 Swap completed successfully!');
-      if (typeof fartSystem !== 'undefined') {
-        fartSystem.playFart('swap_fart');
-      }
-    } else if (maticError || shitError) {
-      showToast('❌ Swap failed! Please try again.', 'error');
-    }
-  }, [isMaticSuccess, isShitSuccess, maticError, shitError]);
 
   return {
     swapMaticForShit,
@@ -741,12 +813,23 @@ export function useSyncReserves(showToast: (message: string, type?: 'success' | 
     functionName: 'syncReserves',
   });
 
-  const { write, data, isLoading } = useContractWrite(config);
-  const { isLoading: isConfirming, isSuccess } = useWaitForTransaction({ hash: data?.hash });
+  const { write, data, isLoading } = useContractWrite({
+    ...config,
+    onError: (error) => {
+      console.error('❌ Sync reserves error:', error);
+      showToast('❌ Sync failed!', 'error');
+    },
+  });
 
-  React.useEffect(() => {
-    if (isSuccess) showToast('✅ Reserves synced!');
-  }, [isSuccess]);
+  const { isLoading: isConfirming, isSuccess } = useWaitForTransaction({
+    hash: data?.hash,
+    onSuccess: () => {
+      showToast('✅ Reserves synced!');
+    },
+    onError: () => {
+      showToast('❌ Sync transaction failed!', 'error');
+    },
+  });
 
   return {
     syncReserves: write,

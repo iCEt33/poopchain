@@ -1,4 +1,4 @@
-// hooks/useDataManager.ts
+// hooks/useDataManager.ts - Enhanced with better refresh management
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { ethers } from 'ethers';
 
@@ -33,22 +33,23 @@ class DataManager {
   private provider: ethers.providers.JsonRpcProvider;
   private config: DataManagerConfig;
   private refreshTimers = new Map<string, NodeJS.Timeout>();
+  private forceRefreshQueue = new Set<string>();
 
   private constructor() {
     this.config = {
       rpcUrls: ['https://polygon.drpc.org'],
       cacheTTLs: {
-        balances: 20000,      // 20 seconds - changes with transactions
-        casinoStats: 45000,   // 45 seconds - changes with bets/refills
-        faucetState: 120000,  // 2 minutes - predictable timing
-        dexReserves: 60000,   // 1 minute - changes with swaps
-        dexQuotes: 15000,     // 15 seconds - should be reasonably fresh
+        balances: 15000,      // 15 seconds - changes with transactions
+        casinoStats: 30000,   // 30 seconds - changes with bets/refills
+        faucetState: 60000,   // 1 minute - predictable timing
+        dexReserves: 45000,   // 45 seconds - changes with swaps
+        dexQuotes: 10000,     // 10 seconds - should be reasonably fresh
       },
       refreshIntervals: {
-        balances: 30000,      // Every 30 seconds instead of 13
-        casinoStats: 60000,   // Every 60 seconds instead of 18
-        faucetState: 180000,  // Every 3 minutes instead of 10 seconds
-        dexReserves: 120000,  // Every 2 minutes instead of 42 seconds
+        balances: 20000,      // Every 20 seconds
+        casinoStats: 35000,   // Every 35 seconds
+        faucetState: 120000,  // Every 2 minutes
+        dexReserves: 60000,   // Every 1 minute
       }
     };
     
@@ -62,11 +63,60 @@ class DataManager {
     return DataManager.instance;
   }
 
-  // Check if cached data is still valid
+  // Enhanced cache validity check with force refresh support
   private isCacheValid(key: string): boolean {
+    if (this.forceRefreshQueue.has(key)) {
+      this.forceRefreshQueue.delete(key);
+      return false;
+    }
+    
     const cached = this.cache.get(key);
     if (!cached) return false;
     return Date.now() - cached.timestamp < cached.ttl;
+  }
+
+  // Force refresh for specific keys
+  forceRefresh(key: string) {
+    console.log('🔄 Force refresh requested for:', key);
+    this.forceRefreshQueue.add(key);
+    this.invalidateCache(key);
+    
+    // Trigger immediate refresh for subscribers
+    const subs = this.subscribers.get(key);
+    if (subs && subs.size > 0) {
+      // Get the fetcher function from the key type
+      const baseKey = key.split(':')[0];
+      this.triggerImmediateRefresh(key, baseKey);
+    }
+  }
+
+  // Trigger immediate refresh for a specific key
+  private async triggerImmediateRefresh(key: string, baseKey: string) {
+    try {
+      let fetcher: (() => Promise<any>) | null = null;
+      
+      if (baseKey === 'balances') {
+        const address = key.split(':')[1];
+        if (address) {
+          fetcher = () => this.fetchBalances(address);
+        }
+      } else if (baseKey === 'casinoStats') {
+        fetcher = () => this.fetchCasinoStats();
+      } else if (baseKey === 'faucetState') {
+        const address = key.split(':')[1];
+        if (address) {
+          fetcher = () => this.fetchFaucetState(address);
+        }
+      } else if (baseKey === 'dexReserves') {
+        fetcher = () => this.fetchDexReserves();
+      }
+      
+      if (fetcher) {
+        await fetcher();
+      }
+    } catch (error) {
+      console.error(`❌ Force refresh failed for ${key}:`, error);
+    }
   }
 
   // Subscribe to data updates
@@ -98,15 +148,22 @@ class DataManager {
   private notifySubscribers(key: string, data: any) {
     const subs = this.subscribers.get(key);
     if (subs) {
-      subs.forEach(callback => callback(data));
+      subs.forEach(callback => {
+        try {
+          callback(data);
+        } catch (error) {
+          console.error('❌ Subscriber callback error:', error);
+        }
+      });
     }
   }
 
-  // Generic data fetcher with caching
+  // Enhanced data fetcher with better error handling and retry logic
   private async getData<T>(
     key: string,
     fetcher: () => Promise<T>,
-    ttl: number
+    ttl: number,
+    retryCount: number = 0
   ): Promise<T> {
     // Return cached data if valid
     if (this.isCacheValid(key)) {
@@ -120,7 +177,7 @@ class DataManager {
       return this.pendingRequests.get(key)!;
     }
 
-    // Start new request
+    // Start new request with retry logic
     const request = fetcher()
       .then(data => {
         // Cache the result
@@ -139,8 +196,21 @@ class DataManager {
         return data;
       })
       .catch(error => {
-        console.error('❌ Request failed for:', key, error);
+        console.error(`❌ Request failed for ${key} (attempt ${retryCount + 1}):`, error);
         this.pendingRequests.delete(key);
+        
+        // Retry logic for network errors
+        if (retryCount < 2 && (error.code === 'NETWORK_ERROR' || error.message.includes('network'))) {
+          console.log(`🔄 Retrying request for ${key} in 1 second...`);
+          return new Promise<T>((resolve, reject) => {
+            setTimeout(() => {
+              this.getData(key, fetcher, ttl, retryCount + 1)
+                .then(resolve)
+                .catch(reject);
+            }, 1000);
+          });
+        }
+        
         throw error;
       });
 
@@ -148,7 +218,7 @@ class DataManager {
     return request;
   }
 
-  // Fetch user balances (POL + SHIT)
+  // Fetch user balances (POL + SHIT) with enhanced error handling
   async fetchBalances(address: string): Promise<{ pol: string; shit: string }> {
     const key = `balances:${address}`;
     
@@ -157,26 +227,44 @@ class DataManager {
       
       const SHIT_ADDRESS = process.env.NEXT_PUBLIC_SHITCOIN_ADDRESS!;
       
-      // Batch both calls efficiently
-      const [polBalance, shitBalanceHex] = await Promise.all([
-        this.provider.getBalance(address),
-        this.provider.call({
-          to: SHIT_ADDRESS,
-          data: `0x70a08231000000000000000000000000${address.slice(2)}`
-        })
-      ]);
+      try {
+        // Batch both calls efficiently with timeout
+        const balancePromises = Promise.all([
+          this.provider.getBalance(address),
+          this.provider.call({
+            to: SHIT_ADDRESS,
+            data: `0x70a08231000000000000000000000000${address.slice(2)}`
+          })
+        ]);
 
-      const result = {
-        pol: parseFloat(ethers.utils.formatEther(polBalance)).toFixed(4),
-        shit: parseFloat(ethers.utils.formatEther(shitBalanceHex)).toFixed(0)
-      };
+        // Add timeout to prevent hanging requests
+        const timeoutPromise = new Promise<never>((_, reject) => 
+          setTimeout(() => reject(new Error('Request timeout')), 10000)
+        );
 
-      console.log('✅ Balances fetched:', result);
-      return result;
+        const [polBalance, shitBalanceHex] = await Promise.race([balancePromises, timeoutPromise]);
+
+        const result = {
+          pol: parseFloat(ethers.utils.formatEther(polBalance)).toFixed(4),
+          shit: parseFloat(ethers.utils.formatEther(shitBalanceHex)).toFixed(0)
+        };
+
+        console.log('✅ Balances fetched:', result);
+        return result;
+      } catch (error) {
+        console.error('❌ Balance fetch error:', error);
+        // Return cached data if available, otherwise throw
+        const cached = this.cache.get(key);
+        if (cached) {
+          console.log('🔄 Using stale cached balance data');
+          return cached.data;
+        }
+        throw error;
+      }
     }, this.config.cacheTTLs.balances);
   }
 
-  // Fetch casino stats
+  // Fetch casino stats with enhanced reliability
   async fetchCasinoStats(): Promise<{
     houseBalance: number;
     minBet: number;
@@ -192,50 +280,44 @@ class DataManager {
       
       const CASINO_ADDRESS = process.env.NEXT_PUBLIC_CASINO_ADDRESS!;
       
-      // Create contract instance
-      const casinoContract = new ethers.Contract(
-        CASINO_ADDRESS,
-        ['function getCasinoStats() view returns (uint256 houseBalanceAmount, uint256 minBetAmount, uint256 maxBetAmount, uint256 currentMaxBet, uint256 winChance, bool refillNeeded, uint256 nextRefillTime)'],
-        this.provider
-      );
-      
-      const result = await casinoContract.getCasinoStats();
-      
-      const stats = {
-        houseBalance: Number(ethers.utils.formatEther(result[0])),
-        minBet: Number(ethers.utils.formatEther(result[1])),
-        maxBet: Number(ethers.utils.formatEther(result[2])),
-        currentMaxBet: Number(ethers.utils.formatEther(result[3])),
-        needsRefill: result[5],
-        timeUntilRefill: Number(result[6])
-      };
+      try {
+        // Create contract instance with timeout
+        const casinoContract = new ethers.Contract(
+          CASINO_ADDRESS,
+          ['function getCasinoStats() view returns (uint256 houseBalanceAmount, uint256 minBetAmount, uint256 maxBetAmount, uint256 currentMaxBet, uint256 winChance, bool refillNeeded, uint256 nextRefillTime)'],
+          this.provider
+        );
+        
+        const timeoutPromise = new Promise<never>((_, reject) => 
+          setTimeout(() => reject(new Error('Casino stats timeout')), 8000)
+        );
 
-      // Parse and log refill timing info
-      const nextRefillTime = Number(result[6]); // Time in seconds until next refill
-      const now = Math.floor(Date.now() / 1000);
-      
-      let refillStatus = '';
-      if (stats.needsRefill) {
-        refillStatus = '✅ READY TO REFILL';
-      } else if (nextRefillTime > 0) {
-        const minutes = Math.floor(nextRefillTime / 60);
-        const seconds = nextRefillTime % 60;
-        refillStatus = `⏰ Next refill in: ${minutes}m ${seconds}s`;
-      } else {
-        refillStatus = '💤 No refill needed (balance sufficient)';
+        const result = await Promise.race([casinoContract.getCasinoStats(), timeoutPromise]);
+        
+        const stats = {
+          houseBalance: Number(ethers.utils.formatEther(result[0])),
+          minBet: Number(ethers.utils.formatEther(result[1])),
+          maxBet: Number(ethers.utils.formatEther(result[2])),
+          currentMaxBet: Number(ethers.utils.formatEther(result[3])),
+          needsRefill: result[5],
+          timeUntilRefill: Number(result[6])
+        };
+
+        console.log('✅ Casino stats fetched:', stats);
+        return stats;
+      } catch (error) {
+        console.error('❌ Casino stats fetch error:', error);
+        const cached = this.cache.get(key);
+        if (cached) {
+          console.log('🔄 Using stale cached casino data');
+          return cached.data;
+        }
+        throw error;
       }
-
-      console.log('✅ Casino stats fetched:', {
-        ...stats,
-        refillStatus,
-        nextRefillSeconds: nextRefillTime
-      });
-      
-      return stats;
     }, this.config.cacheTTLs.casinoStats);
   }
 
-  // Fetch faucet state
+  // Fetch faucet state with better error handling
   async fetchFaucetState(address: string): Promise<{
     canClaim: boolean;
     timeUntilClaim: number;
@@ -247,31 +329,48 @@ class DataManager {
       
       const SHIT_ADDRESS = process.env.NEXT_PUBLIC_SHITCOIN_ADDRESS!;
       
-      const shitContract = new ethers.Contract(
-        SHIT_ADDRESS,
-        [
-          'function canClaimFaucet(address user) view returns (bool)',
-          'function timeUntilNextClaim(address user) view returns (uint256)'
-        ],
-        this.provider
-      );
-      
-      const [canClaim, timeUntil] = await Promise.all([
-        shitContract.canClaimFaucet(address),
-        shitContract.timeUntilNextClaim(address)
-      ]);
-      
-      const result = {
-        canClaim,
-        timeUntilClaim: Number(timeUntil)
-      };
+      try {
+        const shitContract = new ethers.Contract(
+          SHIT_ADDRESS,
+          [
+            'function canClaimFaucet(address user) view returns (bool)',
+            'function timeUntilNextClaim(address user) view returns (uint256)'
+          ],
+          this.provider
+        );
+        
+        const timeoutPromise = new Promise<never>((_, reject) => 
+          setTimeout(() => reject(new Error('Faucet state timeout')), 8000)
+        );
 
-      console.log('✅ Faucet state fetched:', result);
-      return result;
+        const [canClaim, timeUntil] = await Promise.race([
+          Promise.all([
+            shitContract.canClaimFaucet(address),
+            shitContract.timeUntilNextClaim(address)
+          ]),
+          timeoutPromise
+        ]);
+        
+        const result = {
+          canClaim,
+          timeUntilClaim: Number(timeUntil)
+        };
+
+        console.log('✅ Faucet state fetched:', result);
+        return result;
+      } catch (error) {
+        console.error('❌ Faucet state fetch error:', error);
+        const cached = this.cache.get(key);
+        if (cached) {
+          console.log('🔄 Using stale cached faucet data');
+          return cached.data;
+        }
+        throw error;
+      }
     }, this.config.cacheTTLs.faucetState);
   }
 
-  // Fetch DEX reserves
+  // Fetch DEX reserves with timeout protection
   async fetchDexReserves(): Promise<{ matic: number; shit: number }> {
     const key = 'dexReserves';
     
@@ -280,26 +379,43 @@ class DataManager {
       
       const DEX_ADDRESS = process.env.NEXT_PUBLIC_DEX_ADDRESS!;
       
-      const result = await this.provider.call({
-        to: DEX_ADDRESS,
-        data: '0x0902f1ac' // getReserves() function selector
-      });
-      
-      // Decode the result
-      const polReserve = parseInt(result.slice(2, 66), 16) / 1e18;
-      const shitReserve = parseInt(result.slice(66, 130), 16) / 1e18;
-      
-      const reserves = {
-        matic: polReserve,
-        shit: shitReserve
-      };
+      try {
+        const timeoutPromise = new Promise<never>((_, reject) => 
+          setTimeout(() => reject(new Error('DEX reserves timeout')), 8000)
+        );
 
-      console.log('✅ DEX reserves fetched:', reserves);
-      return reserves;
+        const result = await Promise.race([
+          this.provider.call({
+            to: DEX_ADDRESS,
+            data: '0x0902f1ac' // getReserves() function selector
+          }),
+          timeoutPromise
+        ]);
+        
+        // Decode the result
+        const polReserve = parseInt(result.slice(2, 66), 16) / 1e18;
+        const shitReserve = parseInt(result.slice(66, 130), 16) / 1e18;
+        
+        const reserves = {
+          matic: polReserve,
+          shit: shitReserve
+        };
+
+        console.log('✅ DEX reserves fetched:', reserves);
+        return reserves;
+      } catch (error) {
+        console.error('❌ DEX reserves fetch error:', error);
+        const cached = this.cache.get(key);
+        if (cached) {
+          console.log('🔄 Using stale cached DEX data');
+          return cached.data;
+        }
+        throw error;
+      }
     }, this.config.cacheTTLs.dexReserves);
   }
 
-  // Fetch DEX quote
+  // Fetch DEX quote with validation
   async fetchDexQuote(amount: string, direction: 'matic-to-shit' | 'shit-to-matic'): Promise<{
     shitOut: string;
     feeAmount: string;
@@ -313,33 +429,48 @@ class DataManager {
       
       const DEX_ADDRESS = process.env.NEXT_PUBLIC_DEX_ADDRESS!;
       
-      const dexContract = new ethers.Contract(
-        DEX_ADDRESS,
-        [
-          'function getMaticToShitQuote(uint256 maticAmount) view returns (uint256 shitOut, uint256 feeAmount)',
-          'function getShitToMaticQuote(uint256 shitAmount) view returns (uint256 maticOut, uint256 feeAmount)'
-        ],
-        this.provider
-      );
-      
-      let result;
-      if (direction === 'matic-to-shit') {
-        result = await dexContract.getMaticToShitQuote(ethers.utils.parseEther(amount));
-      } else {
-        result = await dexContract.getShitToMaticQuote(ethers.utils.parseEther(amount));
-      }
-      
-      const quote = {
-        shitOut: ethers.utils.formatEther(result[0]),
-        feeAmount: ethers.utils.formatEther(result[1])
-      };
+      try {
+        const dexContract = new ethers.Contract(
+          DEX_ADDRESS,
+          [
+            'function getMaticToShitQuote(uint256 maticAmount) view returns (uint256 shitOut, uint256 feeAmount)',
+            'function getShitToMaticQuote(uint256 shitAmount) view returns (uint256 maticOut, uint256 feeAmount)'
+          ],
+          this.provider
+        );
+        
+        const timeoutPromise = new Promise<never>((_, reject) => 
+          setTimeout(() => reject(new Error('DEX quote timeout')), 5000)
+        );
 
-      console.log('✅ DEX quote fetched:', quote);
-      return quote;
+        let result;
+        if (direction === 'matic-to-shit') {
+          result = await Promise.race([
+            dexContract.getMaticToShitQuote(ethers.utils.parseEther(amount)),
+            timeoutPromise
+          ]);
+        } else {
+          result = await Promise.race([
+            dexContract.getShitToMaticQuote(ethers.utils.parseEther(amount)),
+            timeoutPromise
+          ]);
+        }
+        
+        const quote = {
+          shitOut: ethers.utils.formatEther(result[0]),
+          feeAmount: ethers.utils.formatEther(result[1])
+        };
+
+        console.log('✅ DEX quote fetched:', quote);
+        return quote;
+      } catch (error) {
+        console.error('❌ DEX quote fetch error:', error);
+        return null; // Return null for quote errors instead of cached data
+      }
     }, this.config.cacheTTLs.dexQuotes);
   }
 
-  // Start auto-refresh for a data type
+  // Enhanced auto-refresh with better timing
   startAutoRefresh(key: string, fetcher: () => Promise<any>) {
     if (this.refreshTimers.has(key)) return; // Already running
     
@@ -355,6 +486,15 @@ class DataManager {
     
     const timer = setInterval(async () => {
       try {
+        // Only refresh if we have subscribers
+        const subs = this.subscribers.get(key);
+        if (!subs || subs.size === 0) {
+          console.log('🛑 No subscribers for', key, '- stopping auto-refresh');
+          clearInterval(timer);
+          this.refreshTimers.delete(key);
+          return;
+        }
+        
         this.invalidateCache(key);
         await fetcher();
       } catch (error) {
@@ -363,35 +503,45 @@ class DataManager {
     }, interval);
     
     this.refreshTimers.set(key, timer);
+    console.log(`🔄 Auto-refresh started for ${key} (${interval}ms)`);
+  }
+
+  // Enhanced invalidation for transaction events
+  invalidateForTransaction(txType: 'faucet' | 'casino' | 'dex', userAddress?: string) {
+    console.log('🔄 Invalidating data for transaction:', txType, userAddress);
+    
+    switch (txType) {
+      case 'faucet':
+        if (userAddress) {
+          this.forceRefresh(`balances:${userAddress}`);
+          this.forceRefresh(`faucetState:${userAddress}`);
+        }
+        break;
+      case 'casino':
+        if (userAddress) {
+          this.forceRefresh(`balances:${userAddress}`);
+        }
+        this.forceRefresh('casinoStats');
+        break;
+      case 'dex':
+        if (userAddress) {
+          this.forceRefresh(`balances:${userAddress}`);
+        }
+        this.forceRefresh('dexReserves');
+        // Clear all DEX quotes as they may now be stale
+        const cacheKeys = Array.from(this.cache.keys());
+        for (const key of cacheKeys) {
+          if (key.startsWith('dexQuote:')) {
+            this.invalidateCache(key);
+          }
+        }
+        break;
+    }
   }
 
   // Invalidate cache entry
   invalidateCache(key: string) {
     this.cache.delete(key);
-  }
-
-  // Invalidate cache for transaction events
-  invalidateForTransaction(txType: 'faucet' | 'casino' | 'dex', userAddress?: string) {
-    switch (txType) {
-      case 'faucet':
-        if (userAddress) {
-          this.invalidateCache(`balances:${userAddress}`);
-          this.invalidateCache(`faucetState:${userAddress}`);
-        }
-        break;
-      case 'casino':
-        if (userAddress) {
-          this.invalidateCache(`balances:${userAddress}`);
-        }
-        this.invalidateCache('casinoStats');
-        break;
-      case 'dex':
-        if (userAddress) {
-          this.invalidateCache(`balances:${userAddress}`);
-        }
-        this.invalidateCache('dexReserves');
-        break;
-    }
   }
 
   // Clear all cache
@@ -409,7 +559,7 @@ class DataManager {
   }
 }
 
-// React hooks for easy usage
+// Enhanced React hooks with better refresh management
 export function useOptimizedBalances(address?: string) {
   const [data, setData] = useState<{ pol: string; shit: string } | null>(null);
   const [loading, setLoading] = useState(false);
@@ -435,9 +585,9 @@ export function useOptimizedBalances(address?: string) {
 
   const refresh = useCallback(() => {
     if (!address) return;
-    dataManager.invalidateCache(`balances:${address}`);
-    fetchData();
-  }, [address, fetchData]);
+    console.log('🔄 Manual refresh requested for balances');
+    dataManager.forceRefresh(`balances:${address}`);
+  }, [address, dataManager]);
 
   useEffect(() => {
     if (!address) return;
@@ -445,7 +595,10 @@ export function useOptimizedBalances(address?: string) {
     const key = `balances:${address}`;
     
     // Subscribe to updates
-    const unsubscribe = dataManager.subscribe(key, setData);
+    const unsubscribe = dataManager.subscribe(key, (newData) => {
+      setData(newData);
+      setError(null);
+    });
     
     // Start auto-refresh
     dataManager.startAutoRefresh(key, fetchData);
@@ -454,7 +607,7 @@ export function useOptimizedBalances(address?: string) {
     fetchData();
     
     return unsubscribe;
-  }, [address, fetchData]);
+  }, [address, fetchData, dataManager]);
 
   return { data, loading, error, refresh };
 }
@@ -480,11 +633,19 @@ export function useOptimizedCasinoStats() {
     }
   }, []);
 
+  const refresh = useCallback(() => {
+    console.log('🔄 Manual refresh requested for casino stats');
+    dataManager.forceRefresh('casinoStats');
+  }, [dataManager]);
+
   useEffect(() => {
     const key = 'casinoStats';
     
     // Subscribe to updates
-    const unsubscribe = dataManager.subscribe(key, setData);
+    const unsubscribe = dataManager.subscribe(key, (newData) => {
+      setData(newData);
+      setError(null);
+    });
     
     // Start auto-refresh
     dataManager.startAutoRefresh(key, fetchData);
@@ -493,9 +654,9 @@ export function useOptimizedCasinoStats() {
     fetchData();
     
     return unsubscribe;
-  }, [fetchData]);
+  }, [fetchData, dataManager]);
 
-  return { data, loading, error };
+  return { data, loading, error, refresh };
 }
 
 export function useOptimizedFaucetState(address?: string) {
@@ -521,13 +682,22 @@ export function useOptimizedFaucetState(address?: string) {
     }
   }, [address]);
 
+  const refresh = useCallback(() => {
+    if (!address) return;
+    console.log('🔄 Manual refresh requested for faucet state');
+    dataManager.forceRefresh(`faucetState:${address}`);
+  }, [address, dataManager]);
+
   useEffect(() => {
     if (!address) return;
 
     const key = `faucetState:${address}`;
     
     // Subscribe to updates
-    const unsubscribe = dataManager.subscribe(key, setData);
+    const unsubscribe = dataManager.subscribe(key, (newData) => {
+      setData(newData);
+      setError(null);
+    });
     
     // Start auto-refresh
     dataManager.startAutoRefresh(key, fetchData);
@@ -536,9 +706,9 @@ export function useOptimizedFaucetState(address?: string) {
     fetchData();
     
     return unsubscribe;
-  }, [address, fetchData]);
+  }, [address, fetchData, dataManager]);
 
-  return { data, loading, error };
+  return { data, loading, error, refresh };
 }
 
 export function useOptimizedDexReserves() {
@@ -561,15 +731,17 @@ export function useOptimizedDexReserves() {
   }, []);
 
   const refresh = useCallback(() => {
-    dataManager.invalidateCache('dexReserves');
-    fetchData();
-  }, [fetchData]);
+    console.log('🔄 Manual refresh requested for DEX reserves');
+    dataManager.forceRefresh('dexReserves');
+  }, [dataManager]);
 
   useEffect(() => {
     const key = 'dexReserves';
     
     // Subscribe to updates
-    const unsubscribe = dataManager.subscribe(key, setData);
+    const unsubscribe = dataManager.subscribe(key, (newData) => {
+      setData(newData);
+    });
     
     // Start auto-refresh
     dataManager.startAutoRefresh(key, fetchData);
@@ -578,7 +750,7 @@ export function useOptimizedDexReserves() {
     fetchData();
     
     return unsubscribe;
-  }, [fetchData]);
+  }, [fetchData, dataManager]);
 
   return { data, loading, refresh };
 }
@@ -619,18 +791,18 @@ export function useOptimizedDexQuote(amount: string, direction: 'matic-to-shit' 
     return () => {
       isCancelled = true;
     };
-  }, [amount, direction]);
+  }, [amount, direction, dataManager]);
 
   return { data, loading };
 }
 
-// Transaction event helper
+// Enhanced transaction event helper
 export function useTransactionEvents() {
   const dataManager = DataManager.getInstance();
   
   return useCallback((txType: 'faucet' | 'casino' | 'dex', userAddress?: string) => {
     dataManager.invalidateForTransaction(txType, userAddress);
-  }, []);
+  }, [dataManager]);
 }
 
 export default DataManager;
