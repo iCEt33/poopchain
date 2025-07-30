@@ -1,4 +1,4 @@
-// components/LeaderboardTab.tsx - WORKING VERSION (Just fixed the filter)
+// components/LeaderboardTab.tsx - FIXED VERSION with proper burn address handling
 import React, { useState, useEffect } from 'react';
 import { Trophy, Crown, Medal, Award, TrendingUp, Flame, RefreshCw } from 'lucide-react';
 
@@ -41,6 +41,39 @@ export default function LeaderboardTab() {
   const SHITCOIN_ADDRESS = process.env.NEXT_PUBLIC_SHITCOIN_ADDRESS!;
   const MORALIS_API_KEY = process.env.NEXT_PUBLIC_MORALIS_API_KEY!;
 
+  // Function to get token balance using a different endpoint
+  const getTokenBalance = async (address: string) => {
+    try {
+      const response = await fetch(
+        `https://deep-index.moralis.io/api/v2.2/${address}/erc20?chain=polygon&token_addresses=${SHITCOIN_ADDRESS}`,
+        {
+          headers: {
+            'X-API-Key': MORALIS_API_KEY,
+            'accept': 'application/json'
+          }
+        }
+      );
+
+      if (response.ok) {
+        const data = await response.json();
+        console.log(`💰 Balance for ${address}:`, data);
+        
+        // Extract balance from the data structure and format it
+        if (data && data.length > 0 && data[0].balance) {
+          const rawBalance = data[0].balance;
+          const formattedBalance = parseFloat(rawBalance) / Math.pow(10, 18);
+          console.log(`💰 Formatted balance for ${address}: ${formattedBalance} (raw: ${rawBalance})`);
+          return formattedBalance;
+        }
+        
+        return null;
+      }
+    } catch (err) {
+      console.error(`❌ Failed to get balance for ${address}:`, err);
+    }
+    return null;
+  };
+
   const fetchFromMoralis = async () => {
     try {
       setLoading(true);
@@ -65,8 +98,11 @@ export default function LeaderboardTab() {
       const data = await response.json();
       console.log('📊 Got', data.result?.length || 0, 'holders');
 
+      // Get dead wallet balance specifically
+      const deadWalletData = await getTokenBalance('0x000000000000000000000000000000000000dEaD');
+
       if (data.result && Array.isArray(data.result)) {
-        processData(data.result);
+        processData(data.result, deadWalletData);
       } else {
         throw new Error('No data returned from API');
       }
@@ -78,25 +114,36 @@ export default function LeaderboardTab() {
     }
   };
 
-  const processData = (holders: MoralisHolder[]) => {
+  const processData = (holders: MoralisHolder[], deadWalletData: any) => {
     console.log('🔄 Processing data:', holders);
-
-    // Just use the data as-is with correct field names!
     console.log('✅ Using ALL holders:', holders.length);
 
-    // Calculate total supply
+    // Calculate total supply from ALL holders
     const totalSupply = holders.reduce((sum, holder) => {
       return sum + parseFloat(holder.balance_formatted);
     }, 0);
     setTotalSupply(totalSupply.toFixed(0));
 
-    // Calculate burnt tokens
-    const burnt = holders
+    // Calculate burnt tokens from regular API response
+    let totalBurnt = holders
       .filter(h => BURN_ADDRESSES.includes(h.owner_address.toLowerCase()))
       .reduce((sum, h) => sum + parseFloat(h.balance_formatted), 0);
-    setBurntTokens(burnt.toFixed(0));
 
-    // Filter out system addresses ONLY
+    console.log('🔥 Burnt from regular API:', totalBurnt);
+
+    // Add dead wallet balance specifically
+    if (deadWalletData && deadWalletData > 0) {
+      console.log(`💰 Dead wallet balance: ${deadWalletData}`);
+      console.log('🔥 Adding dead wallet balance to burnt total');
+      totalBurnt += deadWalletData;
+    } else {
+      console.log('❌ No dead wallet balance found');
+    }
+
+    console.log('🔥 Total burnt tokens:', totalBurnt);
+    setBurntTokens(totalBurnt.toFixed(0));
+
+    // NOW filter out system addresses for the leaderboard (excluding burn addresses)
     const filtered = holders.filter(h => 
       !EXCLUDED_ADDRESSES.includes(h.owner_address.toLowerCase()) &&
       !BURN_ADDRESSES.includes(h.owner_address.toLowerCase())
@@ -107,7 +154,7 @@ export default function LeaderboardTab() {
     // Sort by balance
     filtered.sort((a, b) => parseFloat(b.balance_formatted) - parseFloat(a.balance_formatted));
 
-    // Create leaderboard
+    // Create leaderboard (excluding burn addresses)
     const leaderboard: LeaderboardEntry[] = filtered.map((holder, index) => {
       const balance = parseFloat(holder.balance_formatted);
       return {
@@ -125,6 +172,9 @@ export default function LeaderboardTab() {
     setLoading(false);
 
     console.log('✅ Processed', leaderboard.length, 'holders for leaderboard');
+    console.log('📊 Total supply:', totalSupply.toFixed(0));
+    console.log('🔥 Burnt tokens:', totalBurnt.toFixed(0));
+    console.log('👥 Active holders:', filtered.length);
   };
 
   const getRankIcon = (rank: number) => {
@@ -154,7 +204,7 @@ export default function LeaderboardTab() {
 
   useEffect(() => {
     fetchFromMoralis();
-    // Remove the interval for now to stop multiple calls
+    // Auto-refresh every 10 minutes - COMMENTED OUT
     // const interval = setInterval(fetchFromMoralis, 600000); // 10 minutes
     // return () => clearInterval(interval);
   }, []);
@@ -221,6 +271,8 @@ export default function LeaderboardTab() {
           <div className="text-amber-400">Last Update</div>
         </div>
       </div>
+
+
 
       {/* Leaderboard */}
       <div className="bg-amber-900/30 rounded-xl border border-amber-600/30 overflow-hidden">
