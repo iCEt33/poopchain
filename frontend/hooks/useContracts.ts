@@ -1,5 +1,6 @@
 // hooks/useContracts.ts (enhanced) - FIXED transaction handling and state management
 import React from 'react';
+import { useState } from 'react';
 import { useContractRead, useContractWrite, usePrepareContractWrite, useWaitForTransaction } from 'wagmi';
 import { parseEther, formatEther } from 'viem';
 import { ethers } from 'ethers';
@@ -294,85 +295,191 @@ export function useShitDexAllowance(address?: `0x${string}`) {
 
 // ENHANCED: Hook to approve SHIT spending for CASINO with better state management
 export function useApproveShit(showToast: (message: string, type?: 'success' | 'error') => void) {
-  const { config } = usePrepareContractWrite({
-    address: CONTRACT_ADDRESSES.SHITCOIN,
-    abi: SHITCOIN_ABI,
-    functionName: 'approve',
-    args: [CONTRACT_ADDRESSES.CASINO, parseEther('1000000')],
-    enabled: CONTRACT_ADDRESSES.SHITCOIN !== '0x0000000000000000000000000000000000000000',
-  });
+  const [isLoading, setIsLoading] = useState(false);
 
-  const { write, data, error, isLoading } = useContractWrite({
-    ...config,
-    onError: (error) => {
-      console.error('❌ Approval error:', error);
-      showToast('❌ Approval failed! Please try again.', 'error');
-    },
-  });
-  
-  const { isLoading: isConfirming, isSuccess, isError } = useWaitForTransaction({
-    hash: data?.hash,
-    onSuccess: () => {
-      showToast('✅ SHIT tokens approved! You can now place bets.');
-    },
-    onError: () => {
-      showToast('❌ Approval transaction failed!', 'error');
-    },
-  });
-
-  const approveShit = () => {
+  const approveShit = async () => {
     if (CONTRACT_ADDRESSES.SHITCOIN === '0x0000000000000000000000000000000000000000') {
       showToast('Contract not deployed yet!', 'error');
       return;
     }
-    write?.();
+
+    if (isLoading) return;
+    setIsLoading(true);
+
+    try {
+      showToast('⏳ Preparing approval...');
+
+      // Get provider and signer
+      if (!(window as any).ethereum) {
+        throw new Error('No wallet found');
+      }
+
+      const provider = new ethers.providers.Web3Provider((window as any).ethereum);
+      await provider.send("eth_requestAccounts", []);
+      const signer = provider.getSigner();
+
+      // Create contract instance
+      const contract = new ethers.Contract(
+        CONTRACT_ADDRESSES.SHITCOIN,
+        [
+          {
+            "inputs": [
+              {"name": "spender", "type": "address"},
+              {"name": "amount", "type": "uint256"}
+            ],
+            "name": "approve",
+            "outputs": [{"name": "", "type": "bool"}],
+            "stateMutability": "nonpayable",
+            "type": "function"
+          }
+        ],
+        signer
+      );
+
+      console.log('🔓 Approving SHIT for casino...');
+
+      // Send transaction
+      const tx = await contract.approve(
+        CONTRACT_ADDRESSES.CASINO,
+        ethers.utils.parseEther('1000000'), // 1M tokens
+        {
+          gasLimit: 200000,
+        }
+      );
+
+      console.log('✅ Approval transaction submitted:', tx.hash);
+      showToast('⏳ Approval submitted! Waiting for confirmation...');
+
+      // Wait for confirmation
+      const receipt = await tx.wait(1);
+
+      console.log('✅ Approval confirmed!', {
+        hash: receipt.transactionHash,
+        status: receipt.status,
+        blockNumber: receipt.blockNumber,
+      });
+
+      if (receipt.status === 1) {
+        showToast('✅ SHIT tokens approved! You can now place bets.');
+      } else {
+        throw new Error('Transaction was reverted');
+      }
+
+    } catch (error: any) {
+      console.error('❌ Approval failed:', error);
+      
+      if (error.code === 'ACTION_REJECTED' || error.code === 4001) {
+        showToast('❌ Approval cancelled by user.', 'error');
+      } else if (error.message?.includes('insufficient funds')) {
+        showToast('❌ Insufficient POL for gas!', 'error');
+      } else if (error.message?.includes('execution reverted')) {
+        showToast('❌ Approval reverted!', 'error');
+      } else {
+        showToast('❌ Approval failed! Please try again.', 'error');
+      }
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return {
     approveShit,
-    isLoading: isLoading || isConfirming,
+    isLoading,
   };
 }
 
 // ENHANCED: Hook to approve DEX spending with better state management
 export function useApproveDex(showToast: (message: string, type?: 'success' | 'error') => void) {
-  const { config } = usePrepareContractWrite({
-    address: CONTRACT_ADDRESSES.SHITCOIN,
-    abi: SHITCOIN_ABI,
-    functionName: 'approve',
-    args: [CONTRACT_ADDRESSES.DEX, parseEther('1000000')],
-    enabled: CONTRACT_ADDRESSES.SHITCOIN !== '0x0000000000000000000000000000000000000000',
-  });
+  const [isLoading, setIsLoading] = useState(false);
 
-  const { write, data, error, isLoading } = useContractWrite({
-    ...config,
-    onError: (error) => {
-      console.error('❌ DEX approval error:', error);
-      showToast('❌ DEX approval failed! Please try again.', 'error');
-    },
-  });
-  
-  const { isLoading: isConfirming, isSuccess, isError } = useWaitForTransaction({
-    hash: data?.hash,
-    onSuccess: () => {
-      showToast('✅ SHIT approved for DEX! You can now swap.');
-    },
-    onError: () => {
-      showToast('❌ DEX approval transaction failed!', 'error');
-    },
-  });
-
-  const approveDex = () => {
+  const approveDex = async () => {
     if (CONTRACT_ADDRESSES.SHITCOIN === '0x0000000000000000000000000000000000000000') {
       showToast('Contract not deployed yet!', 'error');
       return;
     }
-    write?.();
+
+    if (isLoading) return;
+    setIsLoading(true);
+
+    try {
+      showToast('⏳ Preparing DEX approval...');
+
+      // Get provider and signer
+      if (!(window as any).ethereum) {
+        throw new Error('No wallet found');
+      }
+
+      const provider = new ethers.providers.Web3Provider((window as any).ethereum);
+      await provider.send("eth_requestAccounts", []);
+      const signer = provider.getSigner();
+
+      // Create contract instance
+      const contract = new ethers.Contract(
+        CONTRACT_ADDRESSES.SHITCOIN,
+        [
+          {
+            "inputs": [
+              {"name": "spender", "type": "address"},
+              {"name": "amount", "type": "uint256"}
+            ],
+            "name": "approve",
+            "outputs": [{"name": "", "type": "bool"}],
+            "stateMutability": "nonpayable",
+            "type": "function"
+          }
+        ],
+        signer
+      );
+
+      console.log('🔓 Approving SHIT for DEX...');
+
+      // Send transaction
+      const tx = await contract.approve(
+        CONTRACT_ADDRESSES.DEX,
+        ethers.utils.parseEther('1000000'), // 1M tokens
+        {
+          gasLimit: 200000,
+        }
+      );
+
+      console.log('✅ DEX approval transaction submitted:', tx.hash);
+      showToast('⏳ DEX approval submitted! Waiting for confirmation...');
+
+      // Wait for confirmation
+      const receipt = await tx.wait(1);
+
+      console.log('✅ DEX approval confirmed!', {
+        hash: receipt.transactionHash,
+        status: receipt.status,
+        blockNumber: receipt.blockNumber,
+      });
+
+      if (receipt.status === 1) {
+        showToast('✅ SHIT approved for DEX! You can now swap.');
+      } else {
+        throw new Error('Transaction was reverted');
+      }
+
+    } catch (error: any) {
+      console.error('❌ DEX approval failed:', error);
+      
+      if (error.code === 'ACTION_REJECTED' || error.code === 4001) {
+        showToast('❌ DEX approval cancelled by user.', 'error');
+      } else if (error.message?.includes('insufficient funds')) {
+        showToast('❌ Insufficient POL for gas!', 'error');
+      } else if (error.message?.includes('execution reverted')) {
+        showToast('❌ DEX approval reverted!', 'error');
+      } else {
+        showToast('❌ DEX approval failed! Please try again.', 'error');
+      }
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return {
     approveDex,
-    isLoading: isLoading || isConfirming,
+    isLoading,
   };
 }
 
@@ -422,56 +529,107 @@ export function useClaimFaucet(
   showToast: (message: string, type?: 'success' | 'error') => void,
   onSuccess?: () => void
 ) {
-  const { config } = usePrepareContractWrite({
-    address: CONTRACT_ADDRESSES.SHITCOIN,
-    abi: SHITCOIN_ABI,
-    functionName: 'claimFaucet',
-    value: parseEther('0.01'),
-    enabled: CONTRACT_ADDRESSES.SHITCOIN !== '0x0000000000000000000000000000000000000000',
-  });
+  const [isLoading, setIsLoading] = useState(false);
 
-  const { write, data, error, isLoading } = useContractWrite({
-    ...config,
-    onError: (error) => {
-      console.error('❌ Faucet claim error:', error);
-      showToast('❌ Faucet claim failed! Please try again.', 'error');
-    },
-  });
-  
-  const { isLoading: isConfirming, isSuccess, isError } = useWaitForTransaction({
-    hash: data?.hash,
-    onSuccess: () => {
-      showToast('💩 Faucet claimed! 1000 SHIT tokens received!');
-      if (typeof fartSystem !== 'undefined') {
-        fartSystem.playFart('faucet_fart');
-      }
-      // Call the success callback to refresh data
-      if (onSuccess) {
-        setTimeout(onSuccess, 1000); // Small delay to ensure blockchain state is updated
-      }
-    },
-    onError: () => {
-      showToast('❌ Faucet claim transaction failed!', 'error');
-    },
-  });
-
-  const claimFaucet = () => {
-    if (CONTRACT_ADDRESSES.SHITCOIN === '0x0000000000000000000000000000000000000000') {
+  const claimFaucet = async () => {
+    if (!CONTRACT_ADDRESSES.SHITCOIN || CONTRACT_ADDRESSES.SHITCOIN === '0x0000000000000000000000000000000000000000') {
       showToast('Contract not deployed yet!', 'error');
       return;
     }
-    write?.();
+
+    if (isLoading) return;
+    setIsLoading(true);
+
+    try {
+      showToast('⏳ Preparing transaction...');
+
+      // Get provider and signer
+      if (!(window as any).ethereum) {
+        throw new Error('No wallet found');
+      }
+
+      const provider = new ethers.providers.Web3Provider((window as any).ethereum);
+      await provider.send("eth_requestAccounts", []);
+      const signer = provider.getSigner();
+
+      // Create contract instance
+      const contract = new ethers.Contract(
+        CONTRACT_ADDRESSES.SHITCOIN,
+        [
+          {
+            "inputs": [],
+            "name": "claimFaucet",
+            "outputs": [],
+            "stateMutability": "payable",
+            "type": "function"
+          }
+        ],
+        signer
+      );
+
+      console.log('🚰 Calling claimFaucet...');
+
+      // Send transaction
+      const tx = await contract.claimFaucet({
+        value: ethers.utils.parseEther('0.01'),
+        gasLimit: 300000,
+      });
+
+      console.log('✅ Transaction submitted:', tx.hash);
+      showToast('⏳ Transaction submitted! Waiting for confirmation...');
+
+      // Wait for confirmation
+      const receipt = await tx.wait(1); // Wait for 1 confirmation
+
+      console.log('✅ Transaction confirmed!', {
+        hash: receipt.transactionHash,
+        status: receipt.status,
+        blockNumber: receipt.blockNumber,
+        gasUsed: receipt.gasUsed.toString()
+      });
+
+      if (receipt.status === 1) {
+        showToast('💩 Faucet claimed! 1000 SHIT tokens received!');
+        
+        if (typeof fartSystem !== 'undefined') {
+          fartSystem.playFart('faucet_fart');
+        }
+        
+        if (onSuccess) {
+          setTimeout(onSuccess, 2000);
+        }
+      } else {
+        throw new Error('Transaction was reverted');
+      }
+
+    } catch (error: any) {
+      console.error('❌ Faucet claim failed:', error);
+      
+      if (error.code === 'ACTION_REJECTED' || error.code === 4001) {
+        showToast('❌ Transaction cancelled by user.', 'error');
+      } else if (error.message?.includes('insufficient funds')) {
+        showToast('❌ Insufficient POL balance for gas!', 'error');
+      } else if (error.message?.includes('execution reverted')) {
+        showToast('❌ Transaction reverted! Check cooldown period.', 'error');
+      } else {
+        showToast('❌ Faucet claim failed! Please try again.', 'error');
+      }
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return {
     claimFaucet,
-    isLoading: isLoading || isConfirming,
+    isLoading,
   };
 }
 
 // COMPLETELY REWRITTEN: Casino bet hook with bulletproof state management
+// COMPLETELY REPLACE your current useCasinoBet with this pure ethers version
+
 export function useCasinoBet(showToast: (message: string, type?: 'success' | 'error') => void, userAddress?: `0x${string}`) {
-  const [betParams, setBetParams] = React.useState<{ betAmount: string; choice: number } | null>(null);
+  const [isLoading, setIsLoading] = React.useState(false);
   const [gameResult, setGameResult] = React.useState<{ 
     won: boolean; 
     result: string; 
@@ -480,52 +638,8 @@ export function useCasinoBet(showToast: (message: string, type?: 'success' | 'er
     actualResult: string;
     gasLotteryWon: boolean;
   } | null>(null);
-  
-  // Enhanced state tracking
-  const [transactionState, setTransactionState] = React.useState<'idle' | 'preparing' | 'waiting' | 'confirming' | 'complete' | 'failed'>('idle');
-  const [lastProcessedTxHash, setLastProcessedTxHash] = React.useState<string | null>(null);
 
-  const { config, error: prepareError } = usePrepareContractWrite({
-    address: CONTRACT_ADDRESSES.CASINO,
-    abi: CASINO_ABI,
-    functionName: 'playButtsOrTurds',
-    args: betParams ? [parseEther(betParams.betAmount), BigInt(betParams.choice)] : undefined,
-    value: parseEther('0.005'),
-    enabled: !!betParams && CONTRACT_ADDRESSES.CASINO !== '0x0000000000000000000000000000000000000000',
-  });
-
-  const { write, data, error, isLoading } = useContractWrite({
-    ...config,
-    onSuccess: (data) => {
-      setTransactionState('confirming');
-      setLastProcessedTxHash(data.hash);
-    },
-    onError: (error) => {
-      setTransactionState('failed');
-      // Reset everything on error
-      setBetParams(null);
-      setGameResult(null);
-      setLastProcessedTxHash(null);
-      showToast('❌ Transaction failed! Please try again.', 'error');
-    },
-  });
-  
-  const { isLoading: isConfirming, isSuccess, isError } = useWaitForTransaction({
-    hash: data?.hash,
-    onSuccess: () => {
-      setTransactionState('complete');
-      // Don't reset state here - let the event handler do it
-    },
-    onError: () => {
-      setTransactionState('failed');
-      setBetParams(null);
-      setGameResult(null);
-      setLastProcessedTxHash(null);
-      showToast('❌ Transaction failed! Please try again.', 'error');
-    },
-  });
-
-  // Enhanced event listener with better error handling
+  // Event listener for GameResult - KEEP this part but simplified
   React.useEffect(() => {
     if (!userAddress || CONTRACT_ADDRESSES.CASINO === '0x0000000000000000000000000000000000000000') {
       return;
@@ -536,7 +650,6 @@ export function useCasinoBet(showToast: (message: string, type?: 'success' | 'er
 
     const setupEventListener = async () => {
       try {
-        // Use ethers v5 syntax
         const provider = new ethers.providers.JsonRpcProvider('https://polygon.drpc.org');
 
         contract = new ethers.Contract(
@@ -547,30 +660,19 @@ export function useCasinoBet(showToast: (message: string, type?: 'success' | 'er
           provider
         );
 
-        // Listen for GameResult events for this user
         const eventFilter = contract.filters.GameResult(userAddress);
-
         let processedTxHashes = new Set<string>();
         
         const handleGameResult = (player: string, betAmount: any, playerWon: boolean, playerChoice: string, result: string, payout: any, gasLotteryWon: boolean, event: any) => {
-          if (!isActive) return;
-          
-          if (player.toLowerCase() !== userAddress.toLowerCase()) {
+          if (!isActive || player.toLowerCase() !== userAddress.toLowerCase()) {
             return;
           }
 
-          // Only process events for our current transaction
-          if (lastProcessedTxHash && event.transactionHash.toLowerCase() !== lastProcessedTxHash.toLowerCase()) {
-            return;
-          }
-
-          // Prevent duplicate processing
           if (processedTxHashes.has(event.transactionHash)) {
             return;
           }
           processedTxHashes.add(event.transactionHash);
 
-          // Handle ethers v5 syntax
           const localFormatEther = ethers.utils.formatEther;
           const payoutFormatted = Number(localFormatEther(payout));
           
@@ -583,10 +685,7 @@ export function useCasinoBet(showToast: (message: string, type?: 'success' | 'er
             gasLotteryWon: gasLotteryWon
           });
           
-          // Clean up state immediately
-          setBetParams(null);
-          setTransactionState('idle');
-          setLastProcessedTxHash(null);
+          setIsLoading(false); // Stop loading when we get the result
         };
 
         contract.on(eventFilter, handleGameResult);
@@ -614,184 +713,288 @@ export function useCasinoBet(showToast: (message: string, type?: 'success' | 'er
         cleanup.then(cleanupFn => cleanupFn?.());
       }
     };
-  }, [userAddress, lastProcessedTxHash]);
+  }, [userAddress]);
 
-  const placeBet = (betAmount: string, choice: number) => {
+  // PURE ETHERS placeBet function - NO WAGMI
+  const placeBet = async (betAmount: string, choice: number) => {
     if (CONTRACT_ADDRESSES.CASINO === '0x0000000000000000000000000000000000000000') {
       showToast('Contract not deployed yet!', 'error');
       return;
     }
-    
-    // Clear any previous state
-    setGameResult(null);
-    setTransactionState('preparing');
-    setLastProcessedTxHash(null);
-    setBetParams({ betAmount, choice });
-  };
 
-  // Enhanced write trigger with better error handling
-  React.useEffect(() => {
-    if (betParams && config && write && transactionState === 'preparing' && !isLoading && !isConfirming) {
-      setTransactionState('waiting');
-      try {
-        write();
-      } catch (err) {
-        showToast('❌ Transaction preparation failed!', 'error');
-        setBetParams(null);
-        setTransactionState('idle');
-        setLastProcessedTxHash(null);
+    if (isLoading) return;
+    setIsLoading(true);
+    setGameResult(null);
+
+    try {
+      showToast('⏳ Preparing bet...');
+
+      // Get provider and signer
+      if (!(window as any).ethereum) {
+        throw new Error('No wallet found');
+      }
+
+      const provider = new ethers.providers.Web3Provider((window as any).ethereum);
+      await provider.send("eth_requestAccounts", []);
+      const signer = provider.getSigner();
+
+      // Create contract instance
+      const contract = new ethers.Contract(
+        CONTRACT_ADDRESSES.CASINO,
+        [
+          {
+            "inputs": [
+              {"name": "betAmount", "type": "uint256"},
+              {"name": "choice", "type": "uint256"}
+            ],
+            "name": "playButtsOrTurds",
+            "outputs": [],
+            "stateMutability": "payable", 
+            "type": "function"
+          }
+        ],
+        signer
+      );
+
+      console.log('🎲 Placing bet:', { betAmount, choice });
+
+      // Send transaction
+      const tx = await contract.playButtsOrTurds(
+        ethers.utils.parseEther(betAmount),
+        choice,
+        {
+          value: ethers.utils.parseEther('0.005'),
+          gasLimit: 500000,
+        }
+      );
+
+      console.log('✅ Bet transaction submitted:', tx.hash);
+      showToast('⏳ Bet placed! Waiting for result...');
+
+      // Wait for confirmation
+      const receipt = await tx.wait(1);
+
+      console.log('✅ Bet transaction confirmed!', {
+        hash: receipt.transactionHash,
+        status: receipt.status,
+        blockNumber: receipt.blockNumber,
+      });
+
+      if (receipt.status !== 1) {
+        throw new Error('Transaction was reverted');
+      }
+
+    } catch (error: any) {
+      console.error('❌ Bet failed:', error);
+      setIsLoading(false);
+      
+      if (error.code === 'ACTION_REJECTED' || error.code === 4001) {
+        showToast('❌ Bet cancelled by user.', 'error');
+      } else if (error.message?.includes('insufficient funds')) {
+        showToast('❌ Insufficient balance for bet!', 'error');
+      } else if (error.message?.includes('execution reverted')) {
+        showToast('❌ Bet reverted! Check allowance and limits.', 'error');
+      } else {
+        showToast('❌ Bet failed! Please try again.', 'error');
       }
     }
-  }, [betParams, config, write, transactionState, isLoading, isConfirming]);
-
-  // FIXED: Handle the case where transaction is submitted but confirmation is taking time
-  React.useEffect(() => {
-    if (data?.hash && transactionState === 'waiting') {
-      setTransactionState('confirming');
-      setLastProcessedTxHash(data.hash);
-    }
-  }, [data?.hash, transactionState]);
-
-  // Handle preparation errors
-  React.useEffect(() => {
-    if (prepareError && transactionState === 'preparing') {
-      showToast('❌ Contract preparation failed! Check your token balance and allowance.', 'error');
-      setBetParams(null);
-      setTransactionState('idle');
-      setLastProcessedTxHash(null);
-    }
-  }, [prepareError, transactionState]);
-
-  // Handle user cancellation or transaction failure
-  React.useEffect(() => {
-    if (error && (transactionState === 'waiting' || transactionState === 'preparing')) {
-      setBetParams(null);
-      setTransactionState('idle');
-      setLastProcessedTxHash(null);
-    }
-  }, [error, transactionState]);
-
-  // Auto-reset on failed state
-  React.useEffect(() => {
-    if (transactionState === 'failed') {
-      const timer = setTimeout(() => {
-        setTransactionState('idle');
-      }, 3000);
-      return () => clearTimeout(timer);
-    }
-  }, [transactionState]);
+  };
 
   const clearGameResult = () => {
     setGameResult(null);
-    setBetParams(null);
-    setTransactionState('idle');
-    setLastProcessedTxHash(null);
   };
-
-  // Enhanced loading state that properly reflects the transaction lifecycle
-  const isReallyLoading = transactionState === 'preparing' || 
-                          transactionState === 'waiting' || 
-                          transactionState === 'confirming';
 
   return {
     placeBet,
-    isLoading: isReallyLoading,
+    isLoading,
     gameResult,
     clearGameResult,
   };
 }
 
 // ENHANCED: Hook for DEX swap with better state management
+// REPLACE useDexSwap with this pure ethers version
+
 export function useDexSwap(showToast: (message: string, type?: 'success' | 'error') => void) {
-  const [swapParams, setSwapParams] = React.useState<{ amount: string; direction: string; minOut: string } | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
 
-  const { config: maticConfig } = usePrepareContractWrite({
-    address: CONTRACT_ADDRESSES.DEX,
-    abi: DEX_ABI,
-    functionName: 'swapMaticForShit',
-    args: swapParams?.direction === 'matic-to-shit' ? [parseEther(swapParams.minOut)] : undefined,
-    value: swapParams?.direction === 'matic-to-shit' ? parseEther(swapParams.amount) : undefined,
-    enabled: swapParams?.direction === 'matic-to-shit' && CONTRACT_ADDRESSES.DEX !== '0x0000000000000000000000000000000000000000',
-  });
-
-  const { config: shitConfig } = usePrepareContractWrite({
-    address: CONTRACT_ADDRESSES.DEX,
-    abi: DEX_ABI,
-    functionName: 'swapShitForMatic',
-    args: swapParams?.direction === 'shit-to-matic' ? [parseEther(swapParams.amount), parseEther(swapParams.minOut)] : undefined,
-    enabled: swapParams?.direction === 'shit-to-matic' && CONTRACT_ADDRESSES.DEX !== '0x0000000000000000000000000000000000000000',
-  });
-
-  const { write: writeMaticSwap, data: maticData, error: maticError, isLoading: maticLoading } = useContractWrite({
-    ...maticConfig,
-    onError: (error) => {
-      console.error('❌ MATIC swap error:', error);
-      showToast('❌ Swap failed! Please try again.', 'error');
-      setSwapParams(null);
-    },
-  });
-
-  const { write: writeShitSwap, data: shitData, error: shitError, isLoading: shitLoading } = useContractWrite({
-    ...shitConfig,
-    onError: (error) => {
-      console.error('❌ SHIT swap error:', error);
-      showToast('❌ Swap failed! Please try again.', 'error');
-      setSwapParams(null);
-    },
-  });
-  
-  const { isLoading: isMaticConfirming, isSuccess: isMaticSuccess } = useWaitForTransaction({
-    hash: maticData?.hash,
-    onSuccess: () => {
-      showToast('🔄 Swap completed successfully!');
-      if (typeof fartSystem !== 'undefined') {
-        fartSystem.playFart('swap_fart');
-      }
-      setSwapParams(null);
-    },
-    onError: () => {
-      showToast('❌ Swap transaction failed!', 'error');
-      setSwapParams(null);
-    },
-  });
-
-  const { isLoading: isShitConfirming, isSuccess: isShitSuccess } = useWaitForTransaction({
-    hash: shitData?.hash,
-    onSuccess: () => {
-      showToast('🔄 Swap completed successfully!');
-      if (typeof fartSystem !== 'undefined') {
-        fartSystem.playFart('swap_fart');
-      }
-      setSwapParams(null);
-    },
-    onError: () => {
-      showToast('❌ Swap transaction failed!', 'error');
-      setSwapParams(null);
-    },
-  });
-
-  const swapMaticForShit = (amount: string, minOut: string = '0') => {
+  const swapMaticForShit = async (amount: string, minOut: string = '0') => {
     if (CONTRACT_ADDRESSES.DEX === '0x0000000000000000000000000000000000000000') {
       showToast('Contract not deployed yet!', 'error');
       return;
     }
-    setSwapParams({ amount, direction: 'matic-to-shit', minOut });
-    setTimeout(() => writeMaticSwap?.(), 100);
+
+    if (isLoading) return;
+    setIsLoading(true);
+
+    try {
+      showToast('⏳ Preparing swap...');
+
+      // Get provider and signer
+      if (!(window as any).ethereum) {
+        throw new Error('No wallet found');
+      }
+
+      const provider = new ethers.providers.Web3Provider((window as any).ethereum);
+      await provider.send("eth_requestAccounts", []);
+      const signer = provider.getSigner();
+
+      // Create contract instance
+      const contract = new ethers.Contract(
+        CONTRACT_ADDRESSES.DEX,
+        [
+          {
+            "inputs": [{"name": "minShitOut", "type": "uint256"}],
+            "name": "swapMaticForShit",
+            "outputs": [],
+            "stateMutability": "payable",
+            "type": "function"
+          }
+        ],
+        signer
+      );
+
+      console.log('🔄 Swapping MATIC for SHIT:', { amount, minOut });
+
+      // Send transaction
+      const tx = await contract.swapMaticForShit(
+        ethers.utils.parseEther(minOut),
+        {
+          value: ethers.utils.parseEther(amount),
+          gasLimit: 400000,
+        }
+      );
+
+      console.log('✅ Swap transaction submitted:', tx.hash);
+      showToast('⏳ Swap submitted! Waiting for confirmation...');
+
+      // Wait for confirmation
+      const receipt = await tx.wait(1);
+
+      console.log('✅ Swap confirmed!', {
+        hash: receipt.transactionHash,
+        status: receipt.status,
+        blockNumber: receipt.blockNumber,
+      });
+
+      if (receipt.status === 1) {
+        showToast('🔄 Swap completed successfully!');
+        if (typeof fartSystem !== 'undefined') {
+          fartSystem.playFart('swap_fart');
+        }
+      } else {
+        throw new Error('Transaction was reverted');
+      }
+
+    } catch (error: any) {
+      console.error('❌ MATIC swap failed:', error);
+      
+      if (error.code === 'ACTION_REJECTED' || error.code === 4001) {
+        showToast('❌ Swap cancelled by user.', 'error');
+      } else if (error.message?.includes('insufficient funds')) {
+        showToast('❌ Insufficient MATIC balance!', 'error');
+      } else if (error.message?.includes('execution reverted')) {
+        showToast('❌ Swap reverted! Check slippage.', 'error');
+      } else {
+        showToast('❌ Swap failed! Please try again.', 'error');
+      }
+    } finally {
+      setIsLoading(false);
+    }
   };
 
-  const swapShitForMatic = (amount: string, minOut: string = '0') => {
+  const swapShitForMatic = async (amount: string, minOut: string = '0') => {
     if (CONTRACT_ADDRESSES.DEX === '0x0000000000000000000000000000000000000000') {
       showToast('Contract not deployed yet!', 'error');
       return;
     }
-    setSwapParams({ amount, direction: 'shit-to-matic', minOut });
-    setTimeout(() => writeShitSwap?.(), 100);
+
+    if (isLoading) return;
+    setIsLoading(true);
+
+    try {
+      showToast('⏳ Preparing swap...');
+
+      // Get provider and signer
+      if (!(window as any).ethereum) {
+        throw new Error('No wallet found');
+      }
+
+      const provider = new ethers.providers.Web3Provider((window as any).ethereum);
+      await provider.send("eth_requestAccounts", []);
+      const signer = provider.getSigner();
+
+      // Create contract instance
+      const contract = new ethers.Contract(
+        CONTRACT_ADDRESSES.DEX,
+        [
+          {
+            "inputs": [
+              {"name": "shitAmount", "type": "uint256"},
+              {"name": "minMaticOut", "type": "uint256"}
+            ],
+            "name": "swapShitForMatic", 
+            "outputs": [],
+            "stateMutability": "nonpayable",
+            "type": "function"
+          }
+        ],
+        signer
+      );
+
+      console.log('🔄 Swapping SHIT for MATIC:', { amount, minOut });
+
+      // Send transaction
+      const tx = await contract.swapShitForMatic(
+        ethers.utils.parseEther(amount),
+        ethers.utils.parseEther(minOut),
+        {
+          gasLimit: 400000,
+        }
+      );
+
+      console.log('✅ Swap transaction submitted:', tx.hash);
+      showToast('⏳ Swap submitted! Waiting for confirmation...');
+
+      // Wait for confirmation
+      const receipt = await tx.wait(1);
+
+      console.log('✅ Swap confirmed!', {
+        hash: receipt.transactionHash,
+        status: receipt.status,
+        blockNumber: receipt.blockNumber,
+      });
+
+      if (receipt.status === 1) {
+        showToast('🔄 Swap completed successfully!');
+        if (typeof fartSystem !== 'undefined') {
+          fartSystem.playFart('swap_fart');
+        }
+      } else {
+        throw new Error('Transaction was reverted');
+      }
+
+    } catch (error: any) {
+      console.error('❌ SHIT swap failed:', error);
+      
+      if (error.code === 'ACTION_REJECTED' || error.code === 4001) {
+        showToast('❌ Swap cancelled by user.', 'error');
+      } else if (error.message?.includes('insufficient funds')) {
+        showToast('❌ Insufficient SHIT balance or allowance!', 'error');
+      } else if (error.message?.includes('execution reverted')) {
+        showToast('❌ Swap reverted! Check allowance and slippage.', 'error');
+      } else {
+        showToast('❌ Swap failed! Please try again.', 'error');
+      }
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return {
     swapMaticForShit,
     swapShitForMatic,
-    isLoading: maticLoading || shitLoading || isMaticConfirming || isShitConfirming,
+    isLoading,
   };
 }
 
